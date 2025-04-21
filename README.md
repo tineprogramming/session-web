@@ -10,6 +10,9 @@ Works in Tor! 99% client-side (still requires proxy to swarms though). All encry
 
 **This is rather a technical challenge for me, rather than a stable client**
 
+> [!IMPORTANT]
+> I'm looking for a job! Interested in hiring me? Visit [cv.hloth.dev](https://cv.hloth.dev) to review my resume & CV.
+
 - [X] Receiving messages
 - [X] Sending messages
   - [ ] Attachments support
