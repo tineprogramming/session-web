@@ -1,5 +1,8 @@
 # [Session Web](https://session-web.pages.dev)
 
+> [!NOTE]
+> The project is archived and I no longer contribute to Session. You might want to check out [this fork](https://github.com/gongchandang49/session-web) by gongchandang49
+
 Experimental project running [Session messenger](https://getsession.org) in browser.
 
 ![Screenshot](https://github.com/VityaSchel/session-web/assets/59040542/3d8a1744-efa5-4cbc-8c60-5d06dfcc77c3)
