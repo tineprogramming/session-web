@@ -21,11 +21,6 @@ import { resetTargetNode, resetTargetSwarm } from '@/shared/nodes'
 import { NewConversationPage } from '@/pages/new-conversation'
 import { toast } from 'sonner'
 import { t } from 'i18next'
-import { onionSelfTest } from '@/shared/api/onion-request'
-
-// Temporary: expose the onion self-test so it can be validated against the live
-// network from the browser console / automated checks.
-;(window as unknown as { __onionTest?: typeof onionSelfTest }).__onionTest = onionSelfTest
 
 export default function App() {
   const account = useAppSelector(selectAccount)
@@ -34,7 +29,6 @@ export default function App() {
     if (account) {
       const keypair = generateKeypair(account.mnemonic)
       setIdentityKeypair(keypair)
-      ;(window as unknown as { __sessionId?: string }).__sessionId = account.sessionID
     } else {
       setIdentityKeypair(undefined)
     }

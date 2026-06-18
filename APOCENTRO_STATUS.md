@@ -17,6 +17,7 @@ the project baseline, including the 38-language locale set and CI workflows.
 | §2 | **Magic bytes** (closed ecosystem) | ✅ Done | `src/shared/api/magic-bytes.ts`, wired in `messages-sender.ts` (send) and `messages-decrypter.ts` (receive) |
 | — | **Apocentro branding** (logo, icons, OGP, manifest, metadata, README) | ✅ Done | `public/*`, `src/assets/apocentro-logo.png`, `index.html`, `src/widgets/{loader,session-web-info}.tsx` |
 | §4 | **File attachments** (per-file AES-256-GCM, upload/download proxy, UI) | ✅ Done | `src/shared/api/attachments.ts`, `proxy/src/index.ts` (`/upload`, `/download`), message input + bubble + poll |
+| §3 | **Client-side onion routing** (real 3-hop onion built in the browser; blind backend forwarder) | ✅ Done & verified live | `src/shared/api/onion-crypto.ts`, `onion-request.ts`, `proxy/src/index.ts` (`/forward`, `/snodes` pubkeys), wired in `snodes.ts`/`swarms.ts`/`nodes.ts`/`messages-sender.ts` |
 | §3.9 | **Onion path display** (You → Guard → Middle → Swarm → Recipient, GeoIP flags) | ✅ Done | `proxy/src/index.ts` (`/path`), `src/shared/api/onion-path.ts`, `src/widgets/path-display.tsx` |
 | — | **Group chat** (private groups via DM fan-out + GroupContext) | ✅ Done | `VisibleMessage.ts`, `messages` fan-out in `conversation-message-input.tsx`, `poll.ts`, `new-conversation.tsx` |
 | — | **Deploy config** (Cloudflare Pages frontend + Render/Docker proxy) | ✅ Done | `DEPLOY.md`, `render.yaml`, `proxy/Dockerfile` |
@@ -49,32 +50,31 @@ dropped. Result:
 - Session → Apocentro: rejected (no prefix)
 - Apocentro → Session: discarded (prefix corrupts the protobuf)
 
-## Architectural deviation — onion routing (§3.1–§3.8)
+## Onion routing (§3.1–§3.8) — client-side, verified live
 
-The spec describes onion routing performed **client-side**, with the backend
-acting only as a **blind first-hop forwarder** (`/forward`) so it cannot see
-message content or destination.
+The full 3-hop onion is now built **in the browser**; the backend is only a
+**blind first-hop forwarder** (`/forward`), so it never sees message content or
+the final destination (the spec's privacy-from-backend property).
 
-The recovered baseline instead performs the 3-hop onion routing **server-side**
-inside the proxy (`proxy/src/onion-path.ts`, `session-rpc.ts`): the client sends
-plaintext RPC params to `/store` and `/poll`, and the proxy builds and peels the
-onion.
+- `src/shared/api/onion-crypto.ts` — per-layer X25519 ECDH + HMAC-SHA256("LOKI")
+  + AES-256-GCM (§3.3); little-endian length framing + routing metadata (§3.4).
+- `src/shared/api/onion-request.ts` — 3-layer build (guard/middle/exit, §3.5),
+  send via `/forward` (§3.6), response peel (§3.8); high-level `onionGetSwarm`,
+  `onionSubRequest`.
+- `proxy/src/index.ts` — `/forward` relays the opaque onion bytes to the guard's
+  `/onion_req/v2`; `/snodes` returns node `pubkey_x25519` / `pubkey_ed25519`.
+- Wired into `snodes.ts` (retrieve), `swarms.ts` (`get_swarm`), `nodes.ts`,
+  `messages-sender.ts` (store to recipient + sync swarms).
 
-- ✅ The on-the-wire property toward the Session network is met: requests are
-  3-hop AES-256-GCM onion-routed; snodes never see the client IP.
-- ⚠️ The spec's *privacy-from-backend* property is **not yet** met: because the
-  proxy builds the onion, it can see the RPC and destination. Meeting the spec
-  requires moving onion construction into the browser:
-  - `src/shared/api/onion-crypto.ts` — X25519 ECDH + HMAC-SHA256("LOKI") +
-    AES-256-GCM per layer (port of `proxy/src/crypto.ts` / `onion-path.ts`)
-  - client-side 3-layer build + response peel (§3.5, §3.8)
-  - backend reduced to a blind `/forward` endpoint
-  - `/snodes` extended to return `pubkey_x25519` / `pubkey_ed25519`
+**Verified end-to-end against the live Session network:** a message sent from
+one account was delivered to another, each hop store/retrieve routed through a
+real client-built 3-hop onion. (A get_swarm onion self-test confirmed the crypto
+first.)
 
-This rewrite was deferred deliberately: it is a large change to the proven
-networking path and cannot be verified here without the live Session network.
-The current server-side onion path is functional and was kept as the working
-baseline.
+> Note: a latent bug was also fixed here — bunrest 1.3.8 read the request body
+> twice ("Body already used"), which crashed every POST on modern Bun, so the
+> store/poll endpoints never actually worked before. `proxy/scripts/fix-bunrest.mjs`
+> (run from postinstall) patches it.
 
 ## Running locally
 

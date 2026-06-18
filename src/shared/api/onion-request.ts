@@ -171,16 +171,3 @@ export async function onionSubRequest(
   if (!result) throw new Error('Empty onion batch response')
   return result
 }
-
-/**
- * Self-test: fetch the snode pool and run a `get_swarm` through a real 3-hop
- * onion. Returns the decrypted snode response — used to validate the onion
- * crypto against the live network before wiring it into the message flow.
- */
-export async function onionSelfTest(): Promise<{ status: number; body: unknown }> {
-  const res = await fetch(BACKEND + '/snodes')
-  const j = (await res.json()) as { ok: boolean; snodes: Snode[] }
-  setSnodePool(j.snodes)
-  const exit = _.sample(j.snodes) as Snode
-  return onionRpc('batch', { requests: [{ method: 'get_swarm', params: { pubkey: '05' + '11'.repeat(32) } }] }, exit)
-}
