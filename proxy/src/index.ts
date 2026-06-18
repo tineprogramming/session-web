@@ -426,13 +426,25 @@ Bun.serve({
     const url = new URL(req.url)
     const path = url.pathname
 
-    // API requests -> bunrest on the internal port
+    // API requests -> bunrest on the internal port. Only forward the
+    // content-type (forwarding host/content-length/encoding headers breaks the
+    // internal fetch); let Bun set content-length from the body.
     if (API_PATHS.has(path)) {
-      const init: RequestInit = { method: req.method, headers: req.headers }
-      if (req.method !== 'GET' && req.method !== 'HEAD') {
-        init.body = await req.arrayBuffer()
+      try {
+        const headers: Record<string, string> = {}
+        const ct = req.headers.get('content-type')
+        if (ct) headers['content-type'] = ct
+        const init: RequestInit = { method: req.method, headers }
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          init.body = await req.arrayBuffer()
+        }
+        return await fetch('http://127.0.0.1:' + INTERNAL_PORT + path + url.search, init)
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ ok: false, error: 'internal forward failed: ' + ((e as Error)?.message ?? e) }),
+          { status: 500, headers: { 'content-type': 'application/json' } },
+        )
       }
-      return fetch('http://127.0.0.1:' + INTERNAL_PORT + path + url.search, init)
     }
 
     // Everything else -> static frontend (SPA) with cross-origin isolation.
