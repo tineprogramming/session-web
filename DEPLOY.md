@@ -40,7 +40,25 @@ account in each, and message between them.
 
 ---
 
-## Production deploy
+## Deploy to your own server (nginx) — one command
+
+If you have a Linux server with nginx and DNS pointing at it, run this **on the
+server** (as root). It installs Bun, builds the frontend, runs the proxy as a
+systemd service, configures nginx with the required COOP/COEP headers, and gets
+an HTTPS certificate via certbot:
+
+```bash
+git clone -b claude/apocentro-web-recovery-q13fec \
+    https://github.com/tineprogramming/session-web.git
+cd session-web
+sudo bash deploy/apocentro-deploy.sh <your-domain> <your-email>
+```
+
+Result: `https://<your-domain>` serving Apocentro, with `/api/*` proxied to the
+backend. Manage the proxy with `systemctl status apocentro-proxy` and
+`journalctl -u apocentro-proxy -f`.
+
+## Production deploy (managed hosts)
 
 ### Step 1 — Deploy the proxy (Render, free tier)
 
