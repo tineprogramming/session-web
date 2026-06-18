@@ -13,6 +13,7 @@ import { t } from 'i18next'
 import { getTargetNode } from '@/shared/nodes'
 import { getIdentityKeyPair } from '@/shared/api/storage'
 import { toHex } from '@/shared/api/utils/String'
+import { wrapWithMagicBytes } from '@/shared/api/magic-bytes'
 
 export async function sendMessage(
   destination: string,
@@ -149,7 +150,9 @@ async function encryptMessageAndWrap(
 
   const envelope = await buildEnvelope(envelopeType, destination, networkTimestamp, cipherText)
 
-  const data = wrapEnvelope(envelope)
+  // Apocentro: prepend magic bytes around the encoded WebSocketMessage so the
+  // payload is only readable by other Apocentro clients (closed ecosystem).
+  const data = wrapWithMagicBytes(wrapEnvelope(envelope))
   const data64 = ByteBuffer.wrap(data).toString('base64')
 
   // override the namespaces if those are unset in the incoming messages
