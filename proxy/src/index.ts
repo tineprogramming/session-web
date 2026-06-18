@@ -250,6 +250,69 @@ server.get('/ons', async (req, res) => {
   }
 })
 
+const FILE_SERVER = 'https://filev2.getsession.org'
+
+// Apocentro file attachments — blind proxy to the Session file server.
+// The client uploads/downloads only AES-256-GCM encrypted bytes; the proxy
+// never sees plaintext file content. See spec §4.
+server.post('/upload', async (req, res) => {
+  const body = await z.object({
+    // base64-encoded, already client-side encrypted attachment bytes
+    data: z.string().min(1).max(20_000_000),
+  }).safeParseAsync(req.body)
+  if (!body.success) {
+    res.status(400).json({ ok: false, error: 'Invalid request body' })
+    return
+  }
+  try {
+    const bytes = Buffer.from(body.data.data, 'base64')
+    const upload = await fetch(FILE_SERVER + '/file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: bytes,
+    })
+    if (upload.status !== 200 && upload.status !== 201) {
+      res.status(502).json({ ok: false, error: 'File server rejected upload' })
+      return
+    }
+    const json = await upload.json() as { id: string | number }
+    const id = String(json.id)
+    res.status(200).json({ ok: true, id, url: FILE_SERVER + '/file/' + id })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Internal server error' })
+  }
+})
+
+server.get('/download', async (req, res) => {
+  const query = await z.object({
+    url: z.string().url().startsWith(FILE_SERVER),
+  }).safeParseAsync(req.query)
+  if (!query.success) {
+    res.status(400).json({ ok: false, error: 'Invalid request query' })
+    return
+  }
+  try {
+    const id = query.data.url.split('/').pop()
+    const download = await fetch(FILE_SERVER + '/files/' + id)
+    if (download.status !== 200) {
+      res.status(502).json({ ok: false, error: 'File server error' })
+      return
+    }
+    const json = await download.json() as { status_code?: number, result?: string }
+    if (json.result) {
+      res.status(200).json({ ok: true, data: json.result })
+    } else {
+      // some deployments return raw bytes instead of the {result} envelope
+      const buf = Buffer.from(await download.arrayBuffer())
+      res.status(200).json({ ok: true, data: buf.toString('base64') })
+    }
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Internal server error' })
+  }
+})
+
+server.options('/upload', (req, res) => { res.status(200).send(true) })
+server.options('/download', (req, res) => { res.status(200).send(true) })
 server.options('/snodes', (req, res) => { res.status(200).send(true) })
 server.options('/network_time', (req, res) => { res.status(200).send(true) })
 server.options('/swarms', (req, res) => { res.status(200).send(true) })

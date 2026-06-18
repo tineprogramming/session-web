@@ -26,6 +26,14 @@ export type DbConversation = {
   lastMessageTime: number
 } & Conversation
 
+export type DbAttachment = {
+  contentType: string
+  fileName?: string
+  size?: number
+  /** Decrypted content, stored locally for display. */
+  blob: Blob
+}
+
 export type DbMessage = {
   direction: 'incoming' | 'outgoing'
   accountSessionID: string
@@ -35,6 +43,8 @@ export type DbMessage = {
   conversationID: string
   read: BooleanAsNumber
   textContent: string | null
+  /** Decrypted attachments (images / files), if any. Not indexed. */
+  attachments?: DbAttachment[]
   timestamp: number
   sendingStatus: 'sending' | 'error' | 'sent'
 }
