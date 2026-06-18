@@ -13,7 +13,13 @@ name: Deploy to server (SSH)
 # Trigger: Actions tab -> "Deploy to server (SSH)" -> Run workflow
 # (or Claude can dispatch it for you).
 
+# Triggered either manually (workflow_dispatch, only once this file is on the
+# default branch) OR by pushing a commit containing "[deploy]" to the feature
+# branch — the latter needs no default-branch copy, so Claude can deploy by
+# pushing a [deploy] commit.
 on:
+  push:
+    branches: [claude/apocentro-web-recovery-q13fec]
   workflow_dispatch:
     inputs:
       domain:
@@ -34,6 +40,8 @@ concurrency:
 
 jobs:
   deploy:
+    # Only deploy on manual dispatch or when the pushed commit asks for it.
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy]')
     runs-on: ubuntu-latest
     steps:
       - name: Deploy over SSH
@@ -57,5 +65,5 @@ jobs:
             bash deploy/apocentro-deploy.sh "$DEPLOY_DOMAIN" "${DEPLOY_EMAIL:-admin@$DEPLOY_DOMAIN}"
         env:
           GH_TOKEN: ${{ github.token }}
-          DEPLOY_DOMAIN: ${{ github.event.inputs.domain }}
-          DEPLOY_EMAIL: ${{ github.event.inputs.email }}
+          DEPLOY_DOMAIN: ${{ github.event.inputs.domain || 'tinebritania.tinestuff.com' }}
+          DEPLOY_EMAIL: ${{ github.event.inputs.email || '' }}
