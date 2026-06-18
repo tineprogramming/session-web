@@ -1,5 +1,6 @@
 import bunrest from 'bunrest'
 import cors from 'cors'
+import { join } from 'path'
 import { Snode, fetchSnodesList, pollSnode } from './snodes'
 import { GetNetworkTime } from './network-time'
 import { z } from 'zod'
@@ -361,6 +362,48 @@ server.options('/swarms', (req, res) => { res.status(200).send(true) })
 server.options('/poll', (req, res) => { res.status(200).send(true) })
 server.options('/store', (req, res) => { res.status(200).send(true) })
 
-server.listen(process.env.PORT || 3000, () => {
-  console.log('App is listening on port ' + process.env.PORT || 3000)
+// Apocentro: serve the built frontend AND the API from a single public port.
+// bunrest handles the JSON API on an internal loopback port; a thin front
+// server (below) serves the static frontend with the required cross-origin
+// isolation headers and forwards API calls to bunrest.
+const PUBLIC_PORT = Number(process.env.PORT || 3000)
+const INTERNAL_PORT = PUBLIC_PORT + 1
+const FRONTEND_DIST = process.env.FRONTEND_DIST || join(import.meta.dir, '..', '..', 'dist')
+const COI_HEADERS = {
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+}
+const API_PATHS = new Set([
+  '/snodes', '/network_time', '/swarms', '/poll', '/store',
+  '/ons', '/path', '/upload', '/download',
+])
+
+server.listen(INTERNAL_PORT, () => {
+  console.log('Apocentro API (internal) listening on port ' + INTERNAL_PORT)
 })
+
+Bun.serve({
+  port: PUBLIC_PORT,
+  async fetch(req: Request) {
+    const url = new URL(req.url)
+    const path = url.pathname
+
+    // API requests -> bunrest on the internal port
+    if (API_PATHS.has(path)) {
+      const init: RequestInit = { method: req.method, headers: req.headers }
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        init.body = await req.arrayBuffer()
+      }
+      return fetch('http://127.0.0.1:' + INTERNAL_PORT + path + url.search, init)
+    }
+
+    // Everything else -> static frontend (SPA) with cross-origin isolation.
+    const rel = path === '/' ? '/index.html' : path
+    let file = Bun.file(FRONTEND_DIST + rel)
+    if (!(await file.exists())) {
+      file = Bun.file(FRONTEND_DIST + '/index.html') // SPA fallback
+    }
+    return new Response(file, { headers: COI_HEADERS })
+  },
+})
+console.log('Apocentro (frontend + API) listening on port ' + PUBLIC_PORT)

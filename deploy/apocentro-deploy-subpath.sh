@@ -44,22 +44,22 @@ fi
 export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"; export PATH="$BUN_INSTALL/bin:$PATH"
 BUN_BIN="$(command -v bun)"
 
-# --- 2. build frontend (sub-path base + api under the sub-path) ---------------
+# --- 2. build frontend (sub-path base; API served by the backend itself) ------
+# The Bun backend serves the built frontend AND the API on one port, so the
+# frontend just needs the sub-path base and a backend URL of the sub-path
+# (e.g. /apocentro -> calls /apocentro/snodes, which nginx forwards to Bun).
 echo "==> Building frontend for ${BASE}"
 cd "$REPO_DIR"
-printf 'VITE_BACKEND_URL=%sapi\n' "$BASE" > .env       # e.g. /apocentro/api
+printf 'VITE_BACKEND_URL=/%s\n' "$URLPATH" > .env       # e.g. /apocentro
 "$BUN_BIN" install
 VITE_BASE="$BASE" "$BUN_BIN" run build
 
-echo "==> Publishing to ${WEBROOT}"
-mkdir -p "$WEBROOT"; rm -rf "${WEBROOT:?}/"*; cp -r dist/* "$WEBROOT"/
-
-# --- 3. proxy backend as a systemd service ------------------------------------
+# --- 3. proxy backend (serves frontend + API) as a systemd service ------------
 echo "==> Proxy dependencies + systemd service"
 cd "$REPO_DIR/proxy"; "$BUN_BIN" install
 cat > "/etc/systemd/system/${SERVICE}.service" <<UNIT
 [Unit]
-Description=Apocentro proxy (Session network forwarder)
+Description=Apocentro (Session forwarder + frontend)
 After=network-online.target
 Wants=network-online.target
 
@@ -67,6 +67,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=${REPO_DIR}/proxy
 Environment=PORT=${PROXY_PORT}
+Environment=FRONTEND_DIST=${REPO_DIR}/dist
 ExecStart=${BUN_BIN} run ${REPO_DIR}/proxy/src/index.ts
 Restart=always
 RestartSec=3
@@ -97,21 +98,16 @@ echo "==> Writing nginx snippet ${SNIPPET}"
 mkdir -p /etc/nginx/snippets
 cat > "$SNIPPET" <<NGINX
 # Apocentro — served under ${BASE}
+# The Bun service serves BOTH the frontend and the API on one port, including
+# the required cross-origin isolation headers, so nginx just forwards ${BASE}.
 location = /${URLPATH} { return 301 ${BASE}; }
 
-location ${BASE}api/ {
+location ${BASE} {
     proxy_pass http://127.0.0.1:${PROXY_PORT}/;
     proxy_set_header Host \$host;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     proxy_read_timeout 120s;
     client_max_body_size 25m;
-}
-
-location ${BASE} {
-    root /var/www;
-    add_header Cross-Origin-Embedder-Policy "require-corp" always;
-    add_header Cross-Origin-Opener-Policy "same-origin" always;
-    try_files \$uri \$uri/ ${BASE}index.html;
 }
 NGINX
 
