@@ -23,6 +23,10 @@ iframe {
   box-sizing: border-box;
 }
 
+.color-brand {
+  color: var(--brand);
+}
+
 @layer base {
   :root {
     --background: #fff;

@@ -1,20 +1,14 @@
-# [Session Web](https://session-web.pages.dev)
+# [Session Web](https://sessionweb.pages.dev)
 
-> [!NOTE]
-> The project is archived and I no longer contribute to Session. You might want to check out [this fork](https://github.com/gongchandang49/session-web) by gongchandang49
+Experimental project running [Session messenger](https://getsession.org) in the browser.
 
-Experimental project running [Session messenger](https://getsession.org) in browser.
+![image](https://github.com/user-attachments/assets/7a1d2d79-2161-4dff-95c5-e8daf358f734)
 
-![Screenshot](https://github.com/VityaSchel/session-web/assets/59040542/3d8a1744-efa5-4cbc-8c60-5d06dfcc77c3)
+Visit Session Web: [sessionweb.pages.dev](https://sessionweb.pages.dev)
 
-Visit Session Web: [session-web.pages.dev](https://session-web.pages.dev)
+Works in Tor! 99% client-side (still requires proxy to swarms though). All encryption and private keys never leave the browser.
 
-Works in Tor! 99% client-side (still requires proxy to swarms though). All encryption and private keys never leave browser.
-
-**This is rather a technical challenge for me, rather than a stable client**
-
-> [!IMPORTANT]
-> I'm looking for a job! Interested in hiring me? Visit [cv.hloth.dev](https://cv.hloth.dev) to review my resume & CV.
+**This is an experimental project, not a stable client**
 
 - [X] Receiving messages
 - [X] Sending messages
@@ -31,8 +25,7 @@ Works in Tor! 99% client-side (still requires proxy to swarms though). All encry
   - [ ] Partial conversations loading
 - [X] Multiaccount
 - [X] Localization
-  - [X] English
-  - [X] Russian
+  - [X] 38 most used languages on the internet [[Wikipedia]](https://en.wikipedia.org/wiki/Languages_used_on_the_Internet)
   - [ ] Option to change UI language
 - [ ] PWA
   - [ ] Offline support
@@ -44,16 +37,23 @@ Works in Tor! 99% client-side (still requires proxy to swarms though). All encry
 - [ ] Direct nodes connection support
   - [ ] Onion routing
 
-## How it works?
+## How to deploy your own instance
 
-All your confidential data (private keys, decrypted messages etc) never left your device. We need a proxy server though for 2 reasons:
-1. Every node has its own self-signed SSL certificate and browsers reject connection to these, unless they are added to system level
-2. Nodes do not send CORS headers, which prevent reading responses
+1. Install Bun from https://bun.sh or `npm i -g bun`
 
-Proxy server is only used to route your encrypted JSON_RPC requests to chosen node.
+2. ```git clone https://github.com/gongchandang49/session-web.git && cd session-web```
 
-Source code of proxy server is at [proxy](./proxy) directory and is written in Bun.
+3. ```mv .env.sample .env``` _(This will use my backend by default, feel free to change it)_
 
-Be aware that I didn't care about best practices when writing this code, it does not use any security measures implemented in official clients, it does not prevent you from any kind of malicious attack, for example MITM. Backend requests to nodes aren't onion routed. SSL certificate pinning is not implemented (bun does not support this yet). This client does not support any cool features and is not maintained for security vulnerabilities found in code or dependencies.
+4. ```bun i && bun run build```
 
-Runs on Vite. Backend is mostly written from scratch using parts of code from [Session Desktop client](https://github.com/oxen-io/session-desktop)
+5. Deploy the version generated on `dist/` folder. Example for Cloudflare Pages:
+```wrangler pages deploy ./dist```
+
+## Backend server
+
+Source code of backend/proxy server has been moved to the [session-web-backend repo](https://github.com/gongchandang49/session-web-backend).
+
+## Credits
+
+- Original project (archived): [VityaSchel/session-web](https://github.com/VityaSchel/session-web) by `hloth.dev`
