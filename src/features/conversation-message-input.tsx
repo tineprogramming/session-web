@@ -1,7 +1,8 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/shared/ui/button'
-import { MdArrowUpward, MdAttachFile, MdClose, MdMic, MdStop } from 'react-icons/md'
+import { MdArrowUpward, MdAttachFile, MdClose, MdMic } from 'react-icons/md'
+import cx from 'classnames'
 import { ImSpinner2 } from 'react-icons/im'
 import TextareaAutosize from 'react-textarea-autosize'
 import { sendMessage } from '@/shared/api/messages-sender'
@@ -28,9 +29,15 @@ export function ConversationMessageInput({ conversationID, onSent }: {
   const [uploading, setUploading] = React.useState(false)
   const [recording, setRecording] = React.useState(false)
   const [recordSeconds, setRecordSeconds] = React.useState(0)
+  const [cancelArmed, setCancelArmed] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const recorderRef = React.useRef<MediaRecorder | null>(null)
   const recordTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
+  const holdingRef = React.useRef(false)
+  const cancelArmedRef = React.useRef(false)
+  const cancelledRef = React.useRef(false)
+  const pointerStartXRef = React.useRef(0)
+  const recordStartTimeRef = React.useRef(0)
   const account = useAppSelector(selectAccount)
   const { t } = useTranslation()
 
@@ -75,6 +82,7 @@ export function ConversationMessageInput({ conversationID, onSent }: {
 
   const startRecording = async () => {
     if (recording || uploading) return
+    cancelledRef.current = false
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const mimeType = pickAudioMime()
@@ -84,8 +92,12 @@ export function ConversationMessageInput({ conversationID, onSent }: {
       recorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop())
         if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+        const duration = Date.now() - recordStartTimeRef.current
         setRecording(false)
         setRecordSeconds(0)
+        setCancelArmed(false)
+        if (cancelledRef.current) return
+        if (duration < 700) { toast.message(t('holdToRecord')); return }
         const type = recorder.mimeType || 'audio/webm'
         const blob = new Blob(chunks, { type })
         if (blob.size === 0) return
@@ -104,10 +116,17 @@ export function ConversationMessageInput({ conversationID, onSent }: {
       }
       recorderRef.current = recorder
       recorder.start()
+      recordStartTimeRef.current = Date.now()
       setRecording(true)
       setRecordSeconds(0)
       recordTimerRef.current = setInterval(() => setRecordSeconds(s => s + 1), 1000)
+      // If the user already released during getUserMedia, resolve immediately.
+      if (!holdingRef.current) {
+        if (cancelArmedRef.current) cancelRecording()
+        else stopRecording()
+      }
     } catch {
+      setRecording(false)
       toast.error('Microphone access denied')
     }
   }
@@ -117,11 +136,39 @@ export function ConversationMessageInput({ conversationID, onSent }: {
   }
 
   const cancelRecording = () => {
-    const r = recorderRef.current
-    if (r) { r.onstop = null as never; r.stream.getTracks().forEach(t => t.stop()); r.stop() }
+    cancelledRef.current = true
+    recorderRef.current?.stop()
     if (recordTimerRef.current) clearInterval(recordTimerRef.current)
     setRecording(false)
     setRecordSeconds(0)
+    setCancelArmed(false)
+  }
+
+  // Press-and-hold the mic to record; release to send, slide left to cancel.
+  const handleMicDown = (e: React.PointerEvent) => {
+    if (uploading) return
+    e.preventDefault()
+    holdingRef.current = true
+    cancelArmedRef.current = false
+    pointerStartXRef.current = e.clientX
+    setCancelArmed(false)
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* ignore */ }
+    startRecording()
+  }
+  const handleMicMove = (e: React.PointerEvent) => {
+    if (!holdingRef.current) return
+    const armed = e.clientX - pointerStartXRef.current < -60
+    if (armed !== cancelArmedRef.current) {
+      cancelArmedRef.current = armed
+      setCancelArmed(armed)
+    }
+  }
+  const handleMicUp = (e: React.PointerEvent) => {
+    if (!holdingRef.current) return
+    holdingRef.current = false
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId) } catch { /* ignore */ }
+    if (cancelArmedRef.current) cancelRecording()
+    else stopRecording()
   }
 
   const handleSendMessage = async (override?: { pointer: AttachmentPointerWithUrl, blob: Blob }) => {
@@ -274,56 +321,63 @@ export function ConversationMessageInput({ conversationID, onSent }: {
           </div>
         </div>
       )}
-      {recording ? (
-        <div className='flex items-center w-full px-3 py-3 gap-3'>
-          <span className='animate-pulse text-red-500 text-lg leading-none'>●</span>
-          <span className='text-sm flex-1'>
-            {t('recording')} {Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, '0')}
-          </span>
-          <button onClick={cancelRecording} title={t('cancel')} className='text-neutral-400 hover:text-white'>
-            <MdClose className='w-5 h-5' />
-          </button>
-          <Button size='icon' variant='secondary' onClick={stopRecording} title={t('send')}>
+      <div className='relative flex items-end w-full pr-2 gap-2'>
+        <input
+          ref={fileInputRef}
+          type='file'
+          className='hidden'
+          onChange={handleFileSelected}
+        />
+        <Button
+          size='icon'
+          variant='ghost'
+          className='mb-2 ml-1 shrink-0'
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {uploading ? <ImSpinner2 className='animate-spin' /> : <MdAttachFile />}
+        </Button>
+        <TextareaAutosize
+          placeholder={t('typeMessagePlaceholder')}
+          value={message}
+          onChange={e => setMessage(e.target.value)}
+          onKeyDown={handleKeyDown}
+          minRows={1}
+          maxRows={5}
+          className='rounded-none outline-none flex-1 min-w-0 p-4 placeholder:text-neutral-500 text-sm bg-none resize-none transition-[height] [&::-webkit-scrollbar]:hidden h-[52px]'
+        />
+        {message.trim() || attachment ? (
+          <Button size='icon' variant='secondary' className='mb-2' onClick={() => handleSendMessage()} title={t('send')}>
             <MdArrowUpward />
           </Button>
-        </div>
-      ) : (
-        <div className='flex items-end w-full pr-2 gap-2'>
-          <input
-            ref={fileInputRef}
-            type='file'
-            className='hidden'
-            onChange={handleFileSelected}
-          />
+        ) : (
           <Button
             size='icon'
-            variant='ghost'
-            className='mb-2 ml-1 shrink-0'
+            variant='secondary'
+            className={cx('mb-2 touch-none select-none', recording && (cancelArmed ? 'bg-red-600 text-white scale-110' : 'bg-red-500 text-white scale-110'))}
             disabled={uploading}
-            onClick={() => fileInputRef.current?.click()}
+            onPointerDown={handleMicDown}
+            onPointerMove={handleMicMove}
+            onPointerUp={handleMicUp}
+            onPointerCancel={cancelRecording}
+            title={t('recordVoice')}
           >
-            {uploading ? <ImSpinner2 className='animate-spin' /> : <MdAttachFile />}
+            {uploading ? <ImSpinner2 className='animate-spin' /> : <MdMic />}
           </Button>
-          <TextareaAutosize
-            placeholder={t('typeMessagePlaceholder')}
-            value={message}
-            onChange={e => setMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            minRows={1}
-            maxRows={5}
-            className='rounded-none outline-none flex-1 min-w-0 p-4 placeholder:text-neutral-500 text-sm bg-none resize-none transition-[height] [&::-webkit-scrollbar]:hidden h-[52px]'
-          />
-          {message.trim() || attachment ? (
-            <Button size='icon' variant='secondary' className='mb-2' onClick={() => handleSendMessage()} title={t('send')}>
-              <MdArrowUpward />
-            </Button>
-          ) : (
-            <Button size='icon' variant='secondary' className='mb-2' onClick={startRecording} disabled={uploading} title={t('recordVoice')}>
-              {uploading ? <ImSpinner2 className='animate-spin' /> : <MdMic />}
-            </Button>
-          )}
-        </div>
-      )}
+        )}
+
+        {recording && (
+          <div className='absolute inset-0 flex items-center gap-3 px-4 bg-background pointer-events-none'>
+            <span className='animate-pulse text-red-500 text-lg leading-none'>●</span>
+            <span className='text-sm tabular-nums'>
+              {Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, '0')}
+            </span>
+            <span className={cx('flex-1 text-sm', cancelArmed ? 'text-red-500 font-medium' : 'text-neutral-500')}>
+              {cancelArmed ? t('releaseToCancel') : t('slideToCancel')}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
