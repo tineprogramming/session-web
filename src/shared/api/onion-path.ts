@@ -1,27 +1,27 @@
-// Apocentro onion path (spec §3.9)
+// Apocentro onion path display (spec §3.9).
 //
-// The onion routing itself is performed by the proxy, which relays each storage
-// request through a 3-hop path (guard -> middle -> swarm exit) so that message
-// content and destination are hidden from the proxy. This module fetches the
-// current path for live display in the UI.
+// With client-side onion routing the browser knows the real hops it uses
+// (getLastOnionPath). This module resolves GeoIP for those hops plus the
+// client's own IP via the backend's best-effort /geoip endpoint.
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL
 
-export type OnionHop = {
-  label: string
-  ip: string
-  port: number
-  country: string | null
-  countryCode: string | null
-}
+export type GeoInfo = { ip: string; country: string | null; countryCode: string | null }
 
-export async function fetchOnionPath(): Promise<OnionHop[]> {
-  const response = await fetch(BACKEND + '/path')
-  const json = (await response.json()) as { ok: true; path: OnionHop[] } | { ok: false; error?: string }
-  if (!response.ok || !json.ok) {
-    throw new Error(('error' in json && json.error) || 'Failed to fetch onion path')
-  }
-  return json.path
+export async function fetchGeoip(ips: string[]): Promise<{
+  client: GeoInfo | null
+  geo: Record<string, { country: string | null; countryCode: string | null }>
+}> {
+  const response = await fetch(BACKEND + '/geoip', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ips }),
+  })
+  const json = (await response.json()) as
+    | { ok: true; client: GeoInfo | null; geo: Record<string, { country: string | null; countryCode: string | null }> }
+    | { ok: false; error?: string }
+  if (!response.ok || !json.ok) throw new Error(('error' in json && json.error) || 'Failed to fetch geoip')
+  return { client: json.client, geo: json.geo }
 }
 
 /** Convert an ISO 3166-1 alpha-2 country code to its flag emoji. */

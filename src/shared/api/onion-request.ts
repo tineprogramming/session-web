@@ -31,6 +31,13 @@ export function getSnodePool(): Snode[] {
   return snodePool
 }
 
+// The most recent onion path actually used, for live display in the UI.
+let lastOnionPath: { guard: Snode; middle: Snode; exit: Snode } | null = null
+
+export function getLastOnionPath() {
+  return lastOnionPath
+}
+
 function pickRelays(exit: Snode): { guard: Snode; middle: Snode } {
   const exclude = new Set([exit.ed25519])
   const pool = snodePool.filter(s => !exclude.has(s.ed25519))
@@ -118,6 +125,7 @@ export async function onionRpc(
 ): Promise<{ status: number; body: unknown }> {
   if (snodePool.length < 3) throw new Error('Snode pool too small for onion routing')
   const { guard, middle } = pickRelays(exit)
+  lastOnionPath = { guard, middle, exit }
   const { payload, keys } = await buildOnion({ method, params }, guard, middle, exit)
 
   const response = await fetch(BACKEND + '/forward', {

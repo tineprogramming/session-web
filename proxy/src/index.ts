@@ -299,6 +299,42 @@ server.get('/path', async (req, res) => {
 
 server.options('/path', (req, res) => { res.status(200).send(true) })
 
+// GeoIP for a set of IPs plus the requesting client's own IP+flag (spec §3.9).
+// Used by the live onion-path display, which knows the real hops client-side.
+async function geoipBatch(ips: string[]): Promise<Record<string, { country: string | null, countryCode: string | null }>> {
+  const out: Record<string, { country: string | null, countryCode: string | null }> = {}
+  const unique = Array.from(new Set(ips.filter(Boolean)))
+  if (unique.length === 0) return out
+  try {
+    const r = await fetch('http://ip-api.com/batch?fields=country,countryCode,query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(unique.map(q => ({ query: q }))),
+    })
+    if (r.ok) {
+      const arr = await r.json() as Array<{ query: string, country?: string, countryCode?: string }>
+      for (const e of arr) out[e.query] = { country: e.country ?? null, countryCode: e.countryCode ?? null }
+    }
+  } catch { /* best-effort */ }
+  return out
+}
+
+server.post('/geoip', async (req, res) => {
+  const body = await z.object({ ips: z.array(z.string()).max(10).optional() }).safeParseAsync(req.body)
+  const ips = body.success ? (body.data.ips ?? []) : []
+  // Client IP from the proxy chain (nginx -> front -> bunrest).
+  const fwd = (req.headers['x-forwarded-for'] as string | undefined) ?? (req.headers['x-real-ip'] as string | undefined) ?? ''
+  const clientIp = fwd.split(',')[0]?.trim() || null
+  const geo = await geoipBatch([...ips, ...(clientIp ? [clientIp] : [])])
+  res.status(200).json({
+    ok: true,
+    client: clientIp ? { ip: clientIp, ...(geo[clientIp] ?? { country: null, countryCode: null }) } : null,
+    geo,
+  })
+})
+
+server.options('/geoip', (req, res) => { res.status(200).send(true) })
+
 const FILE_SERVER = 'https://filev2.getsession.org'
 
 // Apocentro file attachments — blind proxy to the Session file server.
@@ -413,7 +449,7 @@ const COI_HEADERS = {
 }
 const API_PATHS = new Set([
   '/snodes', '/network_time', '/swarms', '/poll', '/store',
-  '/ons', '/path', '/upload', '/download', '/forward',
+  '/ons', '/path', '/upload', '/download', '/forward', '/geoip',
 ])
 
 server.listen(INTERNAL_PORT, () => {
@@ -434,6 +470,11 @@ Bun.serve({
         const headers: Record<string, string> = {}
         const ct = req.headers.get('content-type')
         if (ct) headers['content-type'] = ct
+        // Pass the client IP through so /geoip can report it.
+        const xff = req.headers.get('x-forwarded-for')
+        if (xff) headers['x-forwarded-for'] = xff
+        const xri = req.headers.get('x-real-ip')
+        if (xri) headers['x-real-ip'] = xri
         const init: RequestInit = { method: req.method, headers }
         if (req.method !== 'GET' && req.method !== 'HEAD') {
           init.body = await req.arrayBuffer()

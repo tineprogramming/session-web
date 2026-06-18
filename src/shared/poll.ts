@@ -151,7 +151,8 @@ export async function poll() {
 
     const sessionID = msg.to ?? msg.from
     const existingConvo = await db.conversations.get({ sessionID, accountSessionID: account.sessionID })
-    const displayName = msg.content.dataMessage?.profile?.displayName ?? existingConvo?.displayName ?? undefined
+    // Prefer a name the user set locally over the sender's profile name.
+    const displayName = existingConvo?.displayName ?? msg.content.dataMessage?.profile?.displayName ?? undefined
     if (!existingConvo) {
       await db.conversations.add({
         id: uuid(),

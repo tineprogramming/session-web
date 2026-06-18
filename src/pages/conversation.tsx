@@ -8,6 +8,7 @@ import { selectAccount } from '@/shared/store/slices/account'
 import { formatSessionID } from '@/shared/utils'
 import { Conversation, ConversationRef } from '@/widgets/conversation'
 import { ConversationMessageInput } from '@/features/conversation-message-input'
+import { MdEdit } from 'react-icons/md'
 
 export function ConversationPage() {
   const account = useAppSelector(selectAccount)
@@ -45,12 +46,45 @@ export function ConversationPage() {
     conversationRef.current?.scrollToBottom()
   }
 
+  const [editingName, setEditingName] = React.useState(false)
+  const [nameDraft, setNameDraft] = React.useState('')
+
+  const startEditName = () => {
+    setNameDraft(conversation?.displayName ?? '')
+    setEditingName(true)
+  }
+  const saveName = async () => {
+    if (conversation && account) {
+      await Storage.db.conversations.update(conversation.id, { displayName: nameDraft.trim() || undefined })
+    }
+    setEditingName(false)
+  }
+
   return (
     <div className='flex flex-col flex-1 h-full'>
-      <div className="flex items-center px-4 py-2 h-14 shrink-0">
-        <h1 className="text-xl font-bold">
-          {conversation && (conversation.displayName || formatSessionID(conversation.sessionID, 'long'))}
-        </h1>
+      <div className="flex items-center gap-2 px-4 py-2 h-14 shrink-0">
+        {editingName ? (
+          <input
+            autoFocus
+            value={nameDraft}
+            onChange={e => setNameDraft(e.target.value)}
+            onBlur={saveName}
+            onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false) }}
+            placeholder={conversation ? formatSessionID(conversation.sessionID, 'long') : ''}
+            className="text-xl font-bold bg-transparent outline-none border-b border-neutral-700 focus:border-brand min-w-0 flex-1"
+          />
+        ) : (
+          <>
+            <h1 className="text-xl font-bold truncate">
+              {conversation && (conversation.displayName || formatSessionID(conversation.sessionID, 'long'))}
+            </h1>
+            {conversation && (
+              <button onClick={startEditName} title="Set name" className="text-neutral-500 hover:text-white shrink-0">
+                <MdEdit className="w-4 h-4" />
+              </button>
+            )}
+          </>
+        )}
       </div>
       <Separator />
       {/* <div className="bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/60"> */}
