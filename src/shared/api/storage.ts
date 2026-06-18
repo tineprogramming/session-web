@@ -47,6 +47,8 @@ export type DbMessage = {
   attachments?: DbAttachment[]
   timestamp: number
   sendingStatus: 'sending' | 'error' | 'sent'
+  /** For group messages: the Session ID of the sender. Not indexed, undefined for DMs. */
+  senderID?: string
 }
 
 export type DbUser = {

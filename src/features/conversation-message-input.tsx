@@ -15,6 +15,9 @@ import { useAppSelector } from '@/shared/store/hooks'
 import { selectAccount } from '@/shared/store/slices/account'
 import { encryptAndUploadAttachment, MAX_ATTACHMENT_SIZE } from '@/shared/api/attachments'
 import { toast } from 'sonner'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { ConversationType } from '@/shared/api/conversations'
+import { fromHexToArray } from '@/shared/api/utils/String'
 
 export function ConversationMessageInput({ conversationID, onSent }: {
   conversationID: string
@@ -26,6 +29,11 @@ export function ConversationMessageInput({ conversationID, onSent }: {
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const account = useAppSelector(selectAccount)
   const { t } = useTranslation()
+
+  const conversation = useLiveQuery(() => account
+    ? db.conversations.get({ sessionID: conversationID, accountSessionID: account.sessionID })
+    : undefined,
+  [account, conversationID])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if(e.key === 'Enter' && !e.shiftKey) {
@@ -65,6 +73,75 @@ export function ConversationMessageInput({ conversationID, onSent }: {
         blob: attachment.blob,
       }] : undefined
       const timestamp = await getNowWithNetworkOffset()
+      const isGroup = conversation?.type === ConversationType.ClosedGroup
+
+      if (isGroup) {
+        const memberSessionIDs = conversation.members.map(m => m.sessionID)
+        const idBytes = fromHexToArray(conversationID)
+        const fullRoster = [account.sessionID, ...memberSessionIDs]
+        const groupContext = { id: idBytes, name: conversation.displayName, members: fullRoster, type: 'DELIVER' as const }
+
+        const messageInstance = new VisibleMessage({
+          body: message,
+          lokiProfile: await UserUtils.getOurProfile(),
+          timestamp: timestamp,
+          expirationType: 'unknown',
+          expireTimer: 0,
+          identifier: uuid(),
+          attachments: attachments,
+          preview: [],
+          quote: undefined,
+          group: groupContext,
+        })
+        const syncMessage = new VisibleMessage({
+          attachments: attachments,
+          body: message,
+          expirationType: 'unknown',
+          expireTimer: 0,
+          identifier: uuid(),
+          preview: [],
+          lokiProfile: undefined,
+          quote: undefined,
+          reaction: undefined,
+          syncTarget: conversationID,
+          timestamp: timestamp,
+          group: groupContext,
+        })
+        const tempHash = 'temp-unsent-message_' + uuid()
+        await db.messages.add({
+          direction: 'outgoing',
+          conversationID,
+          hash: tempHash,
+          accountSessionID: account.sessionID,
+          textContent: message,
+          attachments: dbAttachments,
+          read: Number(true) as 0 | 1,
+          timestamp,
+          sendingStatus: 'sending',
+          id: messageInstance.identifier
+        })
+        setMessage('')
+        setAttachment(null)
+        onSent()
+
+        let anyOk = false
+        for (const member of memberSessionIDs) {
+          const r = await sendMessage(member, messageInstance, syncMessage)
+          if (r.ok) {
+            anyOk = true
+            await db.messages_seen.add({
+              hash: r.syncHash,
+              receivedAt: timestamp,
+              accountSessionID: account.sessionID
+            })
+          }
+        }
+        await db.messages.update(tempHash, {
+          sendingStatus: anyOk ? 'sent' : 'error'
+        })
+        return
+      }
+
       const messageInstance = new VisibleMessage({
         body: message,
         lokiProfile: await UserUtils.getOurProfile(),

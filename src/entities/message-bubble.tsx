@@ -26,6 +26,11 @@ export function MessageBubble({ msg }: {
           'bg-conversation-bubble': msg.direction === 'incoming',
           'bg-brand text-black': msg.direction === 'outgoing',
         })}>
+          {msg.senderID && msg.direction === 'incoming' && (
+            <div className='text-muted-foreground text-[10px] leading-3 pt-0.5'>
+              {msg.senderID.slice(0, 6)}...{msg.senderID.slice(-4)}
+            </div>
+          )}
           {hasAttachments && (
             <div className='flex flex-col gap-1 pt-1'>
               {msg.attachments!.map((attachment, i) => (

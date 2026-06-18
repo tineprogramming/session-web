@@ -73,6 +73,7 @@ export interface VisibleMessageParams extends ExpirableMessageParams {
   preview?: Array<PreviewWithAttachmentUrl>;
   reaction?: Reaction;
   syncTarget?: string; // undefined means it is not a synced message
+  group?: { id: Uint8Array; name?: string; members: string[]; type: 'UPDATE' | 'DELIVER' };
 }
 
 export class VisibleMessage extends ExpirableMessage {
@@ -88,6 +89,8 @@ export class VisibleMessage extends ExpirableMessage {
   /// In the case of a sync message, the public key of the person the message was targeted at.
   /// - Note: `null or undefined` if this isn't a sync message.
   private readonly syncTarget?: string
+
+  private readonly group?: { id: Uint8Array; name?: string; members: string[]; type: 'UPDATE' | 'DELIVER' }
 
   constructor(params: VisibleMessageParams) {
     super({
@@ -108,6 +111,7 @@ export class VisibleMessage extends ExpirableMessage {
     this.preview = params.preview
     this.reaction = params.reaction
     this.syncTarget = params.syncTarget
+    this.group = params.group
   }
 
   public contentProto(): SignalService.Content {
@@ -133,6 +137,17 @@ export class VisibleMessage extends ExpirableMessage {
     }
     if (this.syncTarget) {
       dataMessage.syncTarget = this.syncTarget
+    }
+
+    if (this.group) {
+      dataMessage.group = new SignalService.GroupContext({
+        id: this.group.id,
+        type: this.group.type === 'UPDATE'
+          ? SignalService.GroupContext.Type.UPDATE
+          : SignalService.GroupContext.Type.DELIVER,
+        ...(this.group.name ? { name: this.group.name } : {}),
+        members: this.group.members,
+      })
     }
 
     if (this.profile) {
