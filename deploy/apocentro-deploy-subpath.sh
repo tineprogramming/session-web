@@ -100,20 +100,34 @@ location ${BASE} {
 NGINX
 
 # --- 5. include the snippet in the existing server block (safely) -------------
+# NOTE: backups/temp files must live OUTSIDE the nginx config dirs, otherwise
+# nginx loads them too (sites-enabled/* is a wildcard include) and you get
+# "duplicate default server" errors.
+CONF_DIR="$(dirname "$NGINX_CONF")"
+CONF_NAME="$(basename "$NGINX_CONF")"
+BACKUP_DIR="/etc/nginx/apocentro-backups"
+mkdir -p "$BACKUP_DIR"
+
+# Clean up any stray backup/temp copies a previous failed run may have left
+# inside the nginx config dir (these would break nginx -t).
+find "$CONF_DIR" -maxdepth 1 -name "${CONF_NAME}.apocentro.bak.*" -delete 2>/dev/null || true
+find "$CONF_DIR" -maxdepth 1 -name "${CONF_NAME}.apocentro.tmp" -delete 2>/dev/null || true
+
 INCLUDE_LINE="    include snippets/${URLPATH}.conf;"
 if grep -q "snippets/${URLPATH}.conf" "$NGINX_CONF"; then
   echo "==> include already present in ${NGINX_CONF}"
 else
-  BACKUP="${NGINX_CONF}.apocentro.bak.$(date +%s)"
+  BACKUP="${BACKUP_DIR}/${CONF_NAME}.$(date +%s).bak"
   cp "$NGINX_CONF" "$BACKUP"
   echo "==> Backed up config to ${BACKUP}"
+  TMP="$(mktemp)"
   # Insert the include right after the first 'listen ... 443' line (inside the SSL server block).
   awk -v inc="$INCLUDE_LINE" '
     /listen[^;]*443/ && !done { print; print inc; done=1; next }
     { print }
-  ' "$BACKUP" > "${NGINX_CONF}.tmp"
-  if grep -q "snippets/${URLPATH}.conf" "${NGINX_CONF}.tmp"; then
-    mv "${NGINX_CONF}.tmp" "$NGINX_CONF"
+  ' "$BACKUP" > "$TMP"
+  if grep -q "snippets/${URLPATH}.conf" "$TMP"; then
+    cp "$TMP" "$NGINX_CONF"; rm -f "$TMP"
     if ! nginx -t; then
       echo "ERROR: nginx test failed after injecting include — rolling back" >&2
       cp "$BACKUP" "$NGINX_CONF"
@@ -121,7 +135,7 @@ else
       exit 1
     fi
   else
-    rm -f "${NGINX_CONF}.tmp"
+    rm -f "$TMP"
     echo "WARN: could not find a 'listen 443' line to auto-inject into ${NGINX_CONF}."
     echo "      Add this line manually inside your HTTPS server block, then reload nginx:"
     echo "        ${INCLUDE_LINE}"
