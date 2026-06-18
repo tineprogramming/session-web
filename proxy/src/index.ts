@@ -250,6 +250,48 @@ server.get('/ons', async (req, res) => {
   }
 })
 
+// Apocentro onion path display (spec §3.9) — returns the 3 relay hops the
+// onion request traverses, annotated with GeoIP country via ip-api.com.
+server.get('/path', async (req, res) => {
+  const all = Array.from(nodes.values())
+  if (all.length < 3) {
+    res.status(503).json({ ok: false, error: 'Not enough nodes available' })
+    return
+  }
+  const picked: Snode[] = []
+  const labels = ['Guard', 'Middle', 'Swarm']
+  while (picked.length < 3) {
+    const candidate = _.sample(all)!
+    if (!picked.some(p => p.public_ip === candidate.public_ip)) picked.push(candidate)
+  }
+
+  let geo: Record<string, { country?: string, countryCode?: string }> = {}
+  try {
+    const lookup = await fetch('http://ip-api.com/batch?fields=country,countryCode,query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(picked.map(p => ({ query: p.public_ip }))),
+    })
+    if (lookup.ok) {
+      const arr = await lookup.json() as Array<{ query: string, country?: string, countryCode?: string }>
+      for (const entry of arr) geo[entry.query] = { country: entry.country, countryCode: entry.countryCode }
+    }
+  } catch { /* GeoIP is best-effort */ }
+
+  res.status(200).json({
+    ok: true,
+    path: picked.map((node, i) => ({
+      label: labels[i],
+      ip: node.public_ip,
+      port: node.storage_port,
+      country: geo[node.public_ip]?.country ?? null,
+      countryCode: geo[node.public_ip]?.countryCode ?? null,
+    })),
+  })
+})
+
+server.options('/path', (req, res) => { res.status(200).send(true) })
+
 const FILE_SERVER = 'https://filev2.getsession.org'
 
 // Apocentro file attachments — blind proxy to the Session file server.

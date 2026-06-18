@@ -8,6 +8,7 @@ import { Separator } from '@/shared/ui/separator'
 import { AccountSwitcher } from '@/features/account-switcher'
 import { ConversationsList } from '@/features/conversations-list'
 import { CreateConversationButton } from '@/entities/create-conversation-button'
+import { PathDisplay } from '@/widgets/path-display'
 
 export function LeftPanel() {
   const [isCollapsed, setIsCollapsed] = React.useState(false)
@@ -69,6 +70,12 @@ export function LeftPanel() {
         {/** todo: pinned */}
         {/* <Separator />
         <ConversationsList isCollapsed={isCollapsed} /> */}
+        {!isCollapsed && (
+          <>
+            <Separator />
+            <PathDisplay />
+          </>
+        )}
       </ResizablePanel>
       <ResizableHandle withHandle />
     </>
