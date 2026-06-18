@@ -89,11 +89,32 @@ Open the deployed site, create an account, and confirm:
 
 ---
 
+## Important: the frontend host must send COOP/COEP headers
+
+Apocentro's crypto needs **cross-origin isolation** (`SharedArrayBuffer`). The
+frontend host must send:
+
+```
+Cross-Origin-Embedder-Policy: require-corp
+Cross-Origin-Opener-Policy: same-origin
+```
+
+Without them, account creation and encryption fail (the app bounces back to
+`/login`). This repo ships a `public/_headers` file (→ `dist/_headers`) that
+**Cloudflare Pages** and **Netlify** apply automatically, so those hosts work
+out of the box.
+
+> ⚠️ **GitHub Pages does NOT work** for Apocentro — it cannot set custom
+> response headers, so cross-origin isolation is impossible there.
+
+For a VPS/nginx, add the two headers to your server config manually.
+
 ## Notes
 
 - **HTTPS is required** for the proxy in production. Browsers block a mixed
-  HTTPS-page → HTTP-proxy request, and the app sets cross-origin isolation
-  headers. Render/Fly/Railway give you HTTPS automatically.
+  HTTPS-page → HTTP-proxy request (except to `http://localhost`, which is
+  exempt — so a deployed frontend can talk to a proxy you run locally).
+  Render/Fly/Railway give you HTTPS automatically.
 - Render's free tier sleeps when idle; the first request after a nap is slow.
 - The proxy holds no secrets and stores nothing; it only relays. Private keys and
   decrypted messages never leave the browser.
