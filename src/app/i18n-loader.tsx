@@ -11,7 +11,8 @@ export const I18nLoader = React.lazy(async () => {
       lng: navigator.language || 'en',
       fallbackLng: 'en',
       backend: {
-        loadPath: '/locales/{{lng}}/{{ns}}.json',
+        // Respect the configured base path so locales resolve under a sub-path deploy.
+        loadPath: import.meta.env.BASE_URL + 'locales/{{lng}}/{{ns}}.json',
       },
       defaultNS: 'common'
     })

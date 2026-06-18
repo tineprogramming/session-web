@@ -56,7 +56,7 @@ export default function App() {
 
   return (
     <div>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
         <Routes>
           <Route path='/' element={<ProtectedRoute><MainWrapper /></ProtectedRoute>}>
             <Route path='/' element={<HomePage />} />
