@@ -14,9 +14,9 @@ name: Deploy to server (SSH)
 # (or Claude can dispatch it for you).
 
 # Triggered either manually (workflow_dispatch, only once this file is on the
-# default branch) OR by pushing a commit containing "[deploy]" to the feature
-# branch — the latter needs no default-branch copy, so Claude can deploy by
-# pushing a [deploy] commit.
+# default branch) OR by pushing a commit whose message contains the marker
+# "[deploy-server]" to the feature branch — the latter needs no default-branch
+# copy. Normal commits are skipped (not failed).
 on:
   push:
     branches: [claude/apocentro-web-recovery-q13fec]
@@ -41,7 +41,7 @@ concurrency:
 jobs:
   deploy:
     # Only deploy on manual dispatch or when the pushed commit asks for it.
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy]')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy-server]')
     runs-on: ubuntu-latest
     steps:
       - name: Deploy over SSH
