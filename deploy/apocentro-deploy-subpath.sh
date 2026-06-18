@@ -20,6 +20,9 @@ BASE="/${URLPATH}/"                                     # e.g. /apocentro/
 WEBROOT="/var/www/${URLPATH}"
 SNIPPET="/etc/nginx/snippets/${URLPATH}.conf"
 SERVICE="apocentro-proxy"
+# High, uncommon port so we don't collide with an app already on 3000 etc.
+# Override with env PROXY_PORT if needed.
+PROXY_PORT="${PROXY_PORT:-41730}"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo "==> Apocentro sub-path deploy"
@@ -63,7 +66,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${REPO_DIR}/proxy
-Environment=PORT=3000
+Environment=PORT=${PROXY_PORT}
 ExecStart=${BUN_BIN} run ${REPO_DIR}/proxy/src/index.ts
 Restart=always
 RestartSec=3
@@ -76,6 +79,19 @@ systemctl daemon-reload
 systemctl enable "${SERVICE}"
 systemctl restart "${SERVICE}"
 
+# Confirm the proxy actually came up on its port (it bootstraps snodes first).
+echo "==> Waiting for proxy on 127.0.0.1:${PROXY_PORT}"
+PROXY_OK=0
+for i in $(seq 1 20); do
+  if curl -fsS -m4 "http://127.0.0.1:${PROXY_PORT}/snodes" >/dev/null 2>&1; then PROXY_OK=1; break; fi
+  sleep 2
+done
+if [[ "$PROXY_OK" != 1 ]]; then
+  echo "WARN: proxy not responding on ${PROXY_PORT}. Recent logs:" >&2
+  systemctl --no-pager status "${SERVICE}" || true
+  journalctl -u "${SERVICE}" -n 30 --no-pager || true
+fi
+
 # --- 4. nginx snippet (location blocks) ---------------------------------------
 echo "==> Writing nginx snippet ${SNIPPET}"
 mkdir -p /etc/nginx/snippets
@@ -84,7 +100,7 @@ cat > "$SNIPPET" <<NGINX
 location = /${URLPATH} { return 301 ${BASE}; }
 
 location ${BASE}api/ {
-    proxy_pass http://127.0.0.1:3000/;
+    proxy_pass http://127.0.0.1:${PROXY_PORT}/;
     proxy_set_header Host \$host;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     proxy_read_timeout 120s;
