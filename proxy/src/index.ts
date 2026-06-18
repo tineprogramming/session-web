@@ -27,9 +27,15 @@ await fetchSnodes()
 setInterval(fetchSnodes, 1000 * 60 * 5)
 
 server.get('/snodes', async (req, res) => {
+  // Return full node descriptors (incl. pubkeys) so the client can build onions.
   res.status(200).json({
     ok: true,
-    snodes: Array.from(nodes.values()).map(node => node.public_ip + ':' + node.storage_port)
+    snodes: Array.from(nodes.values()).map(node => ({
+      ip: node.public_ip,
+      port: node.storage_port,
+      x25519: node.pubkey_x25519,
+      ed25519: node.pubkey_ed25519,
+    }))
   })
 })
 
@@ -354,6 +360,38 @@ server.get('/download', async (req, res) => {
   }
 })
 
+// Apocentro client-side onion routing: blind first-hop forwarder.
+// The client builds the entire 3-layer onion and sends the opaque outer bytes
+// here; we forward them to the guard node's /onion_req/v2 and relay the reply.
+// We never see the message content or final destination (spec §3.6).
+server.post('/forward', async (req, res) => {
+  const body = await z.object({
+    guard: z.object({
+      ip: z.string().regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/),
+      port: z.number().int().positive(),
+    }),
+    payload: z.string().min(1), // base64 of the binary onion body
+  }).safeParseAsync(req.body)
+  if (!body.success) {
+    res.status(400).json({ ok: false, error: 'Invalid request body' })
+    return
+  }
+  try {
+    const bytes = Buffer.from(body.data.payload, 'base64')
+    const r = await fetch(`https://${body.data.guard.ip}:${body.data.guard.port}/onion_req/v2`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: bytes,
+      tls: { rejectUnauthorized: false },
+    })
+    const buf = Buffer.from(await r.arrayBuffer())
+    res.status(200).json({ ok: true, status: r.status, data: buf.toString('base64') })
+  } catch (e) {
+    res.status(502).json({ ok: false, error: 'Guard node unreachable' })
+  }
+})
+
+server.options('/forward', (req, res) => { res.status(200).send(true) })
 server.options('/upload', (req, res) => { res.status(200).send(true) })
 server.options('/download', (req, res) => { res.status(200).send(true) })
 server.options('/snodes', (req, res) => { res.status(200).send(true) })
@@ -375,7 +413,7 @@ const COI_HEADERS = {
 }
 const API_PATHS = new Set([
   '/snodes', '/network_time', '/swarms', '/poll', '/store',
-  '/ons', '/path', '/upload', '/download',
+  '/ons', '/path', '/upload', '/download', '/forward',
 ])
 
 server.listen(INTERNAL_PORT, () => {
