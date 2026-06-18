@@ -13,7 +13,7 @@ import { selectAccount, setAccount, setAuthorized } from '@/shared/store/slices/
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/ui/avatar'
 import cx from 'classnames'
 import { useTranslation } from 'react-i18next'
-import { LogOutIcon, PlusIcon } from 'lucide-react'
+import { LogOutIcon, PlusIcon, PencilIcon } from 'lucide-react'
 import { formatSessionID } from '@/shared/utils'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -37,6 +37,7 @@ export function AccountSwitcher({ isCollapsed }: {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [logoutWarningDialog, setLogoutWarningDialog] = React.useState<false | string>(false)
+  const [nameDialogOpen, setNameDialogOpen] = React.useState(false)
 
   const avatar = React.useMemo(() => {
     if(!selectedAccount || !selectedAccount.profileImage) return
@@ -64,6 +65,8 @@ export function AccountSwitcher({ isCollapsed }: {
       navigate('/login')
     } else if(key === 'logout') {
       setLogoutWarningDialog(selectedAccount.sessionID)
+    } else if(key === 'editname') {
+      setNameDialogOpen(true)
     } else {
       const newSessionID = key
       const dbAccount = await db.accounts.get(newSessionID)
@@ -71,6 +74,13 @@ export function AccountSwitcher({ isCollapsed }: {
       dispatch(setAccount(dbAccount))
       navigate('/')
     }
+  }
+
+  const handleSaveName = async (name: string) => {
+    setNameDialogOpen(false)
+    const displayName = name.trim() || undefined
+    await db.accounts.update(selectedAccount.sessionID, { displayName })
+    dispatch(setAccount({ ...selectedAccount, displayName }))
   }
 
   const handleLogout = async () => {
@@ -114,6 +124,12 @@ export function AccountSwitcher({ isCollapsed }: {
         {accounts.map((account) => (
           <SelectableAccountItem account={account} key={account.sessionID} />
         ))}
+        <SelectItem value='editname'>
+          <div className="flex items-center gap-3 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0 [&_svg]:text-foreground">
+            <PencilIcon />
+            {t('setYourName')}
+          </div>
+        </SelectItem>
         <SelectItem value='new'>
           <div className="flex items-center gap-3 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0 [&_svg]:text-foreground">
             <PlusIcon />
@@ -126,13 +142,54 @@ export function AccountSwitcher({ isCollapsed }: {
             {t('logout')}
           </div>
         </SelectItem>
-        <LogoutWarningDialog 
-          open={logoutWarningDialog !== false} 
+        <LogoutWarningDialog
+          open={logoutWarningDialog !== false}
           onClose={() => setLogoutWarningDialog(false)}
           onSubmit={handleLogout}
         />
+        <NameDialog
+          open={nameDialogOpen}
+          initial={selectedAccount.displayName ?? ''}
+          onClose={() => setNameDialogOpen(false)}
+          onSubmit={handleSaveName}
+        />
       </SelectContent>
     </Select>
+  )
+}
+
+function NameDialog({ open, initial, onClose, onSubmit }: {
+  open: boolean
+  initial: string
+  onClose: () => void
+  onSubmit: (name: string) => void
+}) {
+  const { t } = useTranslation()
+  const [name, setName] = React.useState(initial)
+  React.useEffect(() => { if (open) setName(initial) }, [open, initial])
+
+  return (
+    <AlertDialog open={open} onOpenChange={v => !v && onClose()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t('setYourName')}</AlertDialogTitle>
+          <AlertDialogDescription>{t('setYourNameDescription')}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <input
+          autoFocus
+          value={name}
+          maxLength={64}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') onSubmit(name) }}
+          placeholder={t('yourNamePlaceholder')}
+          className="w-full bg-neutral-900 rounded-md px-3 py-2 outline-none border border-neutral-700 focus:border-brand"
+        />
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose}>{t('cancel')}</AlertDialogCancel>
+          <AlertDialogAction onClick={() => onSubmit(name)}>{t('confirm')}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
