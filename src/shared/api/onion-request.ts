@@ -118,33 +118,47 @@ async function peelResponse(dataB64: string, keys: BuiltOnion['keys']): Promise<
  * swarm that should process the request (for store/retrieve) or any snode (for
  * network-info calls like get_swarm).
  */
+const ONION_ATTEMPTS = 4
+
 export async function onionRpc(
   method: string,
   params: Record<string, unknown>,
   exit: Snode,
 ): Promise<{ status: number; body: unknown }> {
   if (snodePool.length < 3) throw new Error('Snode pool too small for onion routing')
-  const { guard, middle } = pickRelays(exit)
-  lastOnionPath = { guard, middle, exit }
-  const { payload, keys } = await buildOnion({ method, params }, guard, middle, exit)
 
-  const response = await fetch(BACKEND + '/forward', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ guard: { ip: guard.ip, port: guard.port }, payload: toBase64(payload) }),
-  })
-  const json = (await response.json()) as { ok: boolean; data?: string; error?: string }
-  if (!json.ok || !json.data) throw new Error(json.error || 'Onion forward failed')
+  // Some snodes are stale/unreachable, so a random path occasionally fails
+  // (the guard is down, or the response can't be peeled). Retry with a fresh
+  // guard/middle path each time.
+  let lastError: unknown
+  for (let attempt = 0; attempt < ONION_ATTEMPTS; attempt++) {
+    try {
+      const { guard, middle } = pickRelays(exit)
+      lastOnionPath = { guard, middle, exit }
+      const { payload, keys } = await buildOnion({ method, params }, guard, middle, exit)
 
-  const peeled = (await peelResponse(json.data, keys)) as { status?: number; body?: unknown }
-  // Onion v2 responses are usually { status, body } where body is a JSON string.
-  let body: unknown = peeled
-  let status = 200
-  if (peeled && typeof peeled === 'object' && 'body' in peeled) {
-    status = typeof peeled.status === 'number' ? peeled.status : 200
-    body = typeof peeled.body === 'string' ? safeJson(peeled.body) : peeled.body
+      const response = await fetch(BACKEND + '/forward', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guard: { ip: guard.ip, port: guard.port }, payload: toBase64(payload) }),
+      })
+      const json = (await response.json()) as { ok: boolean; data?: string; error?: string }
+      if (!json.ok || !json.data) throw new Error(json.error || 'Onion forward failed')
+
+      const peeled = (await peelResponse(json.data, keys)) as { status?: number; body?: unknown }
+      // Onion v2 responses are usually { status, body } where body is a JSON string.
+      let body: unknown = peeled
+      let status = 200
+      if (peeled && typeof peeled === 'object' && 'body' in peeled) {
+        status = typeof peeled.status === 'number' ? peeled.status : 200
+        body = typeof peeled.body === 'string' ? safeJson(peeled.body) : peeled.body
+      }
+      return { status, body }
+    } catch (e) {
+      lastError = e
+    }
   }
-  return { status, body }
+  throw lastError ?? new Error('Onion request failed')
 }
 
 function safeJson(s: string): unknown {
