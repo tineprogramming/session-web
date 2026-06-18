@@ -1,0 +1,61 @@
+name: Deploy to server (SSH)
+
+# Deploys Apocentro to your own server over SSH.
+# GitHub's runner does the SSH (it is not behind the Claude sandbox firewall),
+# so Claude can trigger this and watch the logs.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   SERVER_HOST      e.g. tinebritania.tinestuff.com
+#   SERVER_PORT      e.g. 2225
+#   SERVER_USER      e.g. root
+#   SERVER_PASSWORD  the SSH password
+#
+# Trigger: Actions tab -> "Deploy to server (SSH)" -> Run workflow
+# (or Claude can dispatch it for you).
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: Domain to serve Apocentro on
+        required: true
+        default: tinebritania.tinestuff.com
+      email:
+        description: Email for the Let's Encrypt certificate
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          command_timeout: 30m
+          envs: GH_TOKEN,DEPLOY_DOMAIN,DEPLOY_EMAIL
+          script: |
+            set -euo pipefail
+            export DEBIAN_FRONTEND=noninteractive
+            command -v git >/dev/null 2>&1 || { apt-get update -y && apt-get install -y git; }
+            rm -rf /opt/apocentro
+            git clone --depth 1 -b claude/apocentro-web-recovery-q13fec \
+              "https://x-access-token:${GH_TOKEN}@github.com/tineprogramming/session-web.git" \
+              /opt/apocentro
+            cd /opt/apocentro
+            bash deploy/apocentro-deploy.sh "$DEPLOY_DOMAIN" "${DEPLOY_EMAIL:-admin@$DEPLOY_DOMAIN}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_DOMAIN: ${{ github.event.inputs.domain }}
+          DEPLOY_EMAIL: ${{ github.event.inputs.email }}
