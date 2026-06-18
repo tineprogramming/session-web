@@ -13,6 +13,15 @@ import { I18nLoader } from '@/app/i18n-loader'
 
 const AppComponent = React.lazy(() => import('@/app/app.tsx'))
 
+// Register the PWA service worker (notifications + installability).
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register(import.meta.env.BASE_URL + 'sw.js', { scope: import.meta.env.BASE_URL })
+      .catch(() => { /* ignore */ })
+  })
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <Suspense fallback={<AppLoader />}>

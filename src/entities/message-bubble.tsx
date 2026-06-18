@@ -69,6 +69,10 @@ function Attachment({ attachment, direction }: {
     )
   }
 
+  if (attachment.contentType?.startsWith('audio/')) {
+    return <audio controls src={url} className='max-w-[260px] h-10' />
+  }
+
   return (
     <a
       href={url}

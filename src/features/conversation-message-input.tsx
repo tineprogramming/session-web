@@ -1,7 +1,7 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/shared/ui/button'
-import { MdArrowUpward, MdAttachFile, MdClose } from 'react-icons/md'
+import { MdArrowUpward, MdAttachFile, MdClose, MdMic, MdStop } from 'react-icons/md'
 import { ImSpinner2 } from 'react-icons/im'
 import TextareaAutosize from 'react-textarea-autosize'
 import { sendMessage } from '@/shared/api/messages-sender'
@@ -26,7 +26,11 @@ export function ConversationMessageInput({ conversationID, onSent }: {
   const [message, setMessage] = React.useState('')
   const [attachment, setAttachment] = React.useState<{ pointer: AttachmentPointerWithUrl, blob: Blob } | null>(null)
   const [uploading, setUploading] = React.useState(false)
+  const [recording, setRecording] = React.useState(false)
+  const [recordSeconds, setRecordSeconds] = React.useState(0)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const recorderRef = React.useRef<MediaRecorder | null>(null)
+  const recordTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
   const account = useAppSelector(selectAccount)
   const { t } = useTranslation()
 
@@ -61,16 +65,76 @@ export function ConversationMessageInput({ conversationID, onSent }: {
     }
   }
 
-  const handleSendMessage = async () => {
+  const pickAudioMime = (): string => {
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
+    for (const m of candidates) {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) return m
+    }
+    return ''
+  }
+
+  const startRecording = async () => {
+    if (recording || uploading) return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = pickAudioMime()
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+      const chunks: Blob[] = []
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data) }
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+        setRecording(false)
+        setRecordSeconds(0)
+        const type = recorder.mimeType || 'audio/webm'
+        const blob = new Blob(chunks, { type })
+        if (blob.size === 0) return
+        const ext = type.includes('ogg') ? 'ogg' : type.includes('mp4') ? 'm4a' : 'webm'
+        const file = new File([blob], `voice-message.${ext}`, { type })
+        setUploading(true)
+        try {
+          const uploaded = await encryptAndUploadAttachment(file)
+          uploaded.pointer.flags = 1 // AttachmentPointer.Flags.VOICE_MESSAGE
+          await handleSendMessage(uploaded)
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Voice message failed')
+        } finally {
+          setUploading(false)
+        }
+      }
+      recorderRef.current = recorder
+      recorder.start()
+      setRecording(true)
+      setRecordSeconds(0)
+      recordTimerRef.current = setInterval(() => setRecordSeconds(s => s + 1), 1000)
+    } catch {
+      toast.error('Microphone access denied')
+    }
+  }
+
+  const stopRecording = () => {
+    recorderRef.current?.stop()
+  }
+
+  const cancelRecording = () => {
+    const r = recorderRef.current
+    if (r) { r.onstop = null as never; r.stream.getTracks().forEach(t => t.stop()); r.stop() }
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+    setRecording(false)
+    setRecordSeconds(0)
+  }
+
+  const handleSendMessage = async (override?: { pointer: AttachmentPointerWithUrl, blob: Blob }) => {
     if (!account) return
     if(uploading) return
-    if(message !== '' || attachment) {
-      const attachments = attachment ? [attachment.pointer] : []
-      const dbAttachments: DbAttachment[] | undefined = attachment ? [{
-        contentType: attachment.pointer.contentType ?? 'application/octet-stream',
-        fileName: attachment.pointer.fileName,
-        size: attachment.pointer.size,
-        blob: attachment.blob,
+    const att = override ?? attachment
+    if(message !== '' || att) {
+      const attachments = att ? [att.pointer] : []
+      const dbAttachments: DbAttachment[] | undefined = att ? [{
+        contentType: att.pointer.contentType ?? 'application/octet-stream',
+        fileName: att.pointer.fileName,
+        size: att.pointer.size,
+        blob: att.blob,
       }] : undefined
       const timestamp = await getNowWithNetworkOffset()
       const isGroup = conversation?.type === ConversationType.ClosedGroup
@@ -210,40 +274,56 @@ export function ConversationMessageInput({ conversationID, onSent }: {
           </div>
         </div>
       )}
-      <div className='flex items-end w-full pr-2 gap-2'>
-        <input
-          ref={fileInputRef}
-          type='file'
-          className='hidden'
-          onChange={handleFileSelected}
-        />
-        <Button
-          size='icon'
-          variant='ghost'
-          className='mb-2 ml-1 shrink-0'
-          disabled={uploading}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          {uploading ? <ImSpinner2 className='animate-spin' /> : <MdAttachFile />}
-        </Button>
-        <TextareaAutosize
-          placeholder={t('typeMessagePlaceholder')}
-          value={message}
-          onChange={e => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-          minRows={1}
-          maxRows={5}
-          className='rounded-none outline-none flex-1 min-w-0 p-4 placeholder:text-neutral-500 text-sm bg-none resize-none transition-[height] [&::-webkit-scrollbar]:hidden h-[52px]'
-        />
-        <Button
-          size='icon'
-          variant='secondary'
-          className='mb-2'
-          onClick={handleSendMessage}
-        >
-          <MdArrowUpward />
-        </Button>
-      </div>
+      {recording ? (
+        <div className='flex items-center w-full px-3 py-3 gap-3'>
+          <span className='animate-pulse text-red-500 text-lg leading-none'>●</span>
+          <span className='text-sm flex-1'>
+            {t('recording')} {Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, '0')}
+          </span>
+          <button onClick={cancelRecording} title={t('cancel')} className='text-neutral-400 hover:text-white'>
+            <MdClose className='w-5 h-5' />
+          </button>
+          <Button size='icon' variant='secondary' onClick={stopRecording} title={t('send')}>
+            <MdArrowUpward />
+          </Button>
+        </div>
+      ) : (
+        <div className='flex items-end w-full pr-2 gap-2'>
+          <input
+            ref={fileInputRef}
+            type='file'
+            className='hidden'
+            onChange={handleFileSelected}
+          />
+          <Button
+            size='icon'
+            variant='ghost'
+            className='mb-2 ml-1 shrink-0'
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploading ? <ImSpinner2 className='animate-spin' /> : <MdAttachFile />}
+          </Button>
+          <TextareaAutosize
+            placeholder={t('typeMessagePlaceholder')}
+            value={message}
+            onChange={e => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            minRows={1}
+            maxRows={5}
+            className='rounded-none outline-none flex-1 min-w-0 p-4 placeholder:text-neutral-500 text-sm bg-none resize-none transition-[height] [&::-webkit-scrollbar]:hidden h-[52px]'
+          />
+          {message.trim() || attachment ? (
+            <Button size='icon' variant='secondary' className='mb-2' onClick={() => handleSendMessage()} title={t('send')}>
+              <MdArrowUpward />
+            </Button>
+          ) : (
+            <Button size='icon' variant='secondary' className='mb-2' onClick={startRecording} disabled={uploading} title={t('recordVoice')}>
+              {uploading ? <ImSpinner2 className='animate-spin' /> : <MdMic />}
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

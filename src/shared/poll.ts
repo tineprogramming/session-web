@@ -5,6 +5,7 @@ import { getTargetSwarm } from '@/shared/nodes'
 import { store } from '@/shared/store'
 import { selectAccount } from '@/shared/store/slices/account'
 import { downloadAndDecryptAttachment } from '@/shared/api/attachments'
+import { notifyIncomingMessage } from '@/shared/notifications'
 import { toHex } from '@/shared/api/utils/String'
 import _ from 'lodash'
 import { v4 as uuid } from 'uuid'
@@ -100,6 +101,23 @@ export async function poll() {
   )
   const messagesToAdd = messagesToAddRaw.filter(Boolean) as DbMessage[]
   await db.messages.bulkAdd(messagesToAdd)
+
+  // Notify for newly received incoming messages when the tab isn't focused.
+  if (typeof document !== 'undefined' && document.hidden) {
+    for (const msg of dataMessages) {
+      if (msg.to) continue // sync / our own
+      const dm = msg.content.dataMessage
+      const group = dm?.group
+      const hasContent = !!dm?.body || !!dm?.attachments?.length
+      if (!hasContent) continue
+      const conversationID = group ? toHex(group.id!) : msg.envelope.source
+      const title = dm?.profile?.displayName || group?.name || 'New message'
+      const isVoice = dm?.attachments?.some(a => (a.flags ?? 0) === 1)
+      const body = dm?.body
+        || (isVoice ? '🎤 Voice message' : (dm?.attachments?.length ? '📎 Attachment' : ''))
+      notifyIncomingMessage({ title, body, conversationID })
+    }
+  }
   
   const profilesUnfiltered = _.uniqBy(dataMessages.map(msg => ({
     sessionID: msg.to ?? msg.envelope.source,
@@ -117,7 +135,9 @@ export async function poll() {
   for (const msg of dataMessages) {
     const group = msg.content.dataMessage?.group
     const body = msg.content.dataMessage?.body
-    const previewText = body || (msg.content.dataMessage?.attachments?.length ? '📎 Attachment' : null)
+    const atts = msg.content.dataMessage?.attachments
+    const previewText = body
+      || (atts?.some(a => (a.flags ?? 0) === 1) ? '🎤 Voice message' : (atts?.length ? '📎 Attachment' : null))
 
     if (group) {
       const groupId = toHex(group.id!)

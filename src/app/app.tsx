@@ -21,6 +21,7 @@ import { resetTargetNode, resetTargetSwarm } from '@/shared/nodes'
 import { NewConversationPage } from '@/pages/new-conversation'
 import { toast } from 'sonner'
 import { t } from 'i18next'
+import { ensureNotificationPermission } from '@/shared/notifications'
 
 export default function App() {
   const account = useAppSelector(selectAccount)
@@ -29,6 +30,7 @@ export default function App() {
     if (account) {
       const keypair = generateKeypair(account.mnemonic)
       setIdentityKeypair(keypair)
+      ensureNotificationPermission()
     } else {
       setIdentityKeypair(undefined)
     }
