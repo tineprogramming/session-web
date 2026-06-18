@@ -143,6 +143,35 @@ function safeJson(s: string): unknown {
   try { return JSON.parse(s) } catch { return s }
 }
 
+type SnodeSwarmEntry = {
+  ip: string
+  port: string | number
+  pubkey_x25519: string
+  pubkey_ed25519: string
+}
+
+/** Look up a pubkey's swarm through the onion (no exit-node dependency). */
+export async function onionGetSwarm(pubkey: string): Promise<Snode[]> {
+  if (snodePool.length < 3) throw new Error('Snode pool too small for onion routing')
+  const exit = _.sample(snodePool) as Snode
+  const { body } = await onionRpc('batch', { requests: [{ method: 'get_swarm', params: { pubkey } }] }, exit)
+  const snodes = ((body as { results?: Array<{ body?: { snodes?: SnodeSwarmEntry[] } }> })?.results?.[0]?.body?.snodes) ?? []
+  return snodes
+    .filter(s => s.ip && s.ip !== '0.0.0.0' && s.pubkey_x25519)
+    .map(s => ({ ip: s.ip, port: Number(s.port), x25519: s.pubkey_x25519, ed25519: s.pubkey_ed25519 }))
+}
+
+/** Run a single storage_rpc sub-request (store/retrieve/...) through the onion. */
+export async function onionSubRequest(
+  sub: { method: string; params: Record<string, unknown> },
+  exit: Snode,
+): Promise<{ code: number; body: Record<string, unknown> }> {
+  const { body } = await onionRpc('batch', { requests: [sub] }, exit)
+  const result = (body as { results?: Array<{ code: number; body: Record<string, unknown> }> })?.results?.[0]
+  if (!result) throw new Error('Empty onion batch response')
+  return result
+}
+
 /**
  * Self-test: fetch the snode pool and run a `get_swarm` through a real 3-hop
  * onion. Returns the decrypted snode response — used to validate the onion

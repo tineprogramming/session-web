@@ -34,6 +34,7 @@ export default function App() {
     if (account) {
       const keypair = generateKeypair(account.mnemonic)
       setIdentityKeypair(keypair)
+      ;(window as unknown as { __sessionId?: string }).__sessionId = account.sessionID
     } else {
       setIdentityKeypair(undefined)
     }

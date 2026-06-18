@@ -20,7 +20,7 @@ export type NewMessage = {
   hash: string;
 }
 
-export async function getNewMessages(swarm: string): Promise<NewMessage[]> {
+export async function getNewMessages(swarm: import('@/shared/api/onion-crypto').Snode): Promise<NewMessage[]> {
   const keypair = await UserUtils.getIdentityKeyPair()
   if (!keypair) throw new Error('No identity keypair found')
 

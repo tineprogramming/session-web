@@ -3,17 +3,18 @@
 
 import { getNowWithNetworkOffset } from '@/shared/api/get-network-time'
 import { SignalService } from '@/shared/api/signal-service'
-import { isNil, toNumber } from 'lodash'
+import { isNil, toNumber, sample } from 'lodash'
 import { SnodeNamespaces } from '../../../types/namespaces'
 import * as MessageEncrypter from './messages-encrypter'
 import ByteBuffer from 'bytebuffer'
 import { ContentMessage, toRawMessage } from '@/shared/api/messages'
 import { toast } from 'sonner'
 import { t } from 'i18next'
-import { getTargetNode } from '@/shared/nodes'
 import { getIdentityKeyPair } from '@/shared/api/storage'
 import { toHex } from '@/shared/api/utils/String'
 import { wrapWithMagicBytes } from '@/shared/api/magic-bytes'
+import { fetchSwarmsFor } from '@/shared/api/swarms'
+import { onionSubRequest } from '@/shared/api/onion-request'
 
 export async function sendMessage(
   destination: string,
@@ -48,39 +49,48 @@ export async function sendMessage(
     },
   ])
 
-  const request = await fetch(import.meta.env.VITE_BACKEND_URL + '/store', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  // Store the message to the recipient's swarm and the sync copy to our own
+  // swarm, each via a client-side 3-hop onion (spec §3). The proxy only blindly
+  // forwards the outer onion bytes; it never sees the destination or content.
+  try {
+    const [recipientSwarm, ourSwarm] = await Promise.all([
+      fetchSwarmsFor(message.recipient),
+      fetchSwarmsFor(toHex(keypair.pubKey)),
+    ])
+    const recipientExit = sample(recipientSwarm)
+    const ourExit = sample(ourSwarm)
+    if (!recipientExit || !ourExit) {
+      toast.error(t('storeMessageError'))
+      return { ok: false }
+    }
+
+    const storeRes = await onionSubRequest({
+      method: 'store',
       params: {
         pubkey: message.recipient,
-        data64: encryptedAndWrapped.data64,
+        namespace: encryptedAndWrapped.namespace,
         ttl,
         timestamp: encryptedAndWrapped.networkTimestamp,
-        namespace: encryptedAndWrapped.namespace,
+        data: encryptedAndWrapped.data64,
       },
-      destination: message.recipient,
-      snode: await getTargetNode(),
-      sync: {
-        pubkey: toHex(keypair?.pubKey),
-        data: syncEncryptedAndWrapped.data64
-      }
-    })
-  })
+    }, recipientExit)
 
-  if (request.status !== 200) {
+    const syncRes = await onionSubRequest({
+      method: 'store',
+      params: {
+        pubkey: toHex(keypair.pubKey),
+        namespace: syncEncryptedAndWrapped.namespace,
+        ttl,
+        timestamp: syncEncryptedAndWrapped.networkTimestamp,
+        data: syncEncryptedAndWrapped.data64,
+      },
+    }, ourExit)
+
+    const hash = (storeRes.body as { hash?: string }).hash ?? ''
+    const syncHash = (syncRes.body as { hash?: string }).hash ?? ''
+    return { ok: true, hash, syncHash }
+  } catch (e) {
     toast.error(t('storeMessageError'))
-    return { ok: false }
-  }
-
-  const response = await request.json() as { ok: true, hash: string, syncHash: string } | { ok: false, error?: string }
-
-  if (response.ok) {
-    return { ok: true, hash: response.hash, syncHash: response.syncHash }
-  } else {
-    if('error' in response) {
-      toast.error(response.error)
-    }
     return { ok: false }
   }
 }
