@@ -10,12 +10,18 @@ import _ from 'lodash'
 import { v4 as uuid } from 'uuid'
 
 async function downloadMessageAttachments(
-  pointers: { url?: string | null, key?: Uint8Array | null, contentType?: string | null, fileName?: string | null, size?: number | null }[]
+  pointers: { url?: string | null, id?: unknown, key?: Uint8Array | null, digest?: Uint8Array | null, contentType?: string | null, fileName?: string | null, size?: number | null }[]
 ): Promise<DbAttachment[] | undefined> {
   if (!pointers.length) return undefined
   const results = await Promise.all(pointers.map(async pointer => {
     try {
-      const blob = await downloadAndDecryptAttachment(pointer)
+      const blob = await downloadAndDecryptAttachment({
+        url: pointer.url,
+        id: pointer.id != null ? String(pointer.id) : undefined,
+        key: pointer.key,
+        digest: pointer.digest,
+        contentType: pointer.contentType,
+      })
       return {
         contentType: pointer.contentType ?? blob.type ?? 'application/octet-stream',
         fileName: pointer.fileName ?? undefined,

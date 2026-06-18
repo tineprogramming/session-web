@@ -115,6 +115,7 @@ export async function encryptAndUploadAttachment(
 
 type DownloadablePointer = {
   url?: string | null
+  id?: number | string | null
   key?: Uint8Array | null
   digest?: Uint8Array | null
   contentType?: string | null
@@ -125,11 +126,22 @@ type DownloadablePointer = {
  * attachment scheme (AES-256-CBC + HMAC-SHA256). Returns a displayable Blob.
  */
 export async function downloadAndDecryptAttachment(pointer: DownloadablePointer): Promise<Blob> {
-  if (!pointer.url || !pointer.key) {
-    throw new Error('Attachment pointer is missing url or key')
+  if (!pointer.key) {
+    throw new Error('Attachment pointer is missing key')
   }
 
-  const response = await fetch(BACKEND + '/download?' + new URLSearchParams({ url: pointer.url }))
+  // Prefer the explicit file id (mobile app may omit the url); fall back to url.
+  const params = new URLSearchParams()
+  const idStr = pointer.id != null ? String(pointer.id) : ''
+  if (/^\d+$/.test(idStr) && idStr !== '0') {
+    params.set('id', idStr)
+  } else if (pointer.url) {
+    params.set('url', pointer.url)
+  } else {
+    throw new Error('Attachment pointer is missing url and id')
+  }
+
+  const response = await fetch(BACKEND + '/download?' + params)
   const json = (await response.json()) as { ok: true; data: string } | { ok: false; error?: string }
   if (!response.ok || !json.ok) {
     throw new Error(('error' in json && json.error) || 'Attachment download failed')

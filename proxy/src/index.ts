@@ -301,19 +301,33 @@ server.options('/path', (req, res) => { res.status(200).send(true) })
 
 // GeoIP for a set of IPs plus the requesting client's own IP+flag (spec §3.9).
 // Used by the live onion-path display, which knows the real hops client-side.
+// Cache GeoIP results so we don't hit ip-api's rate limit (which would drop the
+// country flags). IPs rarely change country, so a long-lived cache is fine.
+const geoipCache: Map<string, { country: string | null, countryCode: string | null }> = new Map()
+
 async function geoipBatch(ips: string[]): Promise<Record<string, { country: string | null, countryCode: string | null }>> {
   const out: Record<string, { country: string | null, countryCode: string | null }> = {}
   const unique = Array.from(new Set(ips.filter(Boolean)))
-  if (unique.length === 0) return out
+  const missing: string[] = []
+  for (const ip of unique) {
+    const cached = geoipCache.get(ip)
+    if (cached) out[ip] = cached
+    else missing.push(ip)
+  }
+  if (missing.length === 0) return out
   try {
     const r = await fetch('http://ip-api.com/batch?fields=country,countryCode,query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(unique.map(q => ({ query: q }))),
+      body: JSON.stringify(missing.map(q => ({ query: q }))),
     })
     if (r.ok) {
       const arr = await r.json() as Array<{ query: string, country?: string, countryCode?: string }>
-      for (const e of arr) out[e.query] = { country: e.country ?? null, countryCode: e.countryCode ?? null }
+      for (const e of arr) {
+        const entry = { country: e.country ?? null, countryCode: e.countryCode ?? null }
+        out[e.query] = entry
+        if (entry.countryCode) geoipCache.set(e.query, entry)
+      }
     }
   } catch { /* best-effort */ }
   return out
@@ -369,15 +383,25 @@ server.post('/upload', async (req, res) => {
 })
 
 server.get('/download', async (req, res) => {
+  // Accept either an explicit file `id` or a `url` (any file-server URL — we
+  // only use its trailing id). This handles attachments from the mobile app,
+  // which may send only the id.
   const query = await z.object({
-    url: z.string().url().startsWith(FILE_SERVER),
+    url: z.string().optional(),
+    id: z.string().optional(),
   }).safeParseAsync(req.query)
   if (!query.success) {
     res.status(400).json({ ok: false, error: 'Invalid request query' })
     return
   }
+  const id = (query.data.id && /^\d+$/.test(query.data.id))
+    ? query.data.id
+    : (query.data.url?.split(/[/?#]/).filter(Boolean).pop() ?? '')
+  if (!/^\d+$/.test(id)) {
+    res.status(400).json({ ok: false, error: 'Missing or invalid file id' })
+    return
+  }
   try {
-    const id = query.data.url.split('/').pop()
     const download = await fetch(FILE_SERVER + '/files/' + id)
     if (download.status !== 200) {
       res.status(502).json({ ok: false, error: 'File server error' })
