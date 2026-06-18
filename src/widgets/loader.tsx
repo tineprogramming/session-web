@@ -1,10 +1,10 @@
-import SessionLogo from '@/assets/session-logo.svg?react'
+import logoUrl from '@/assets/apocentro-logo.png'
 
 export function AppLoader() {
-  
+
   return (
     <main className='flex min-h-screen items-center justify-center'>
-      <SessionLogo className='h-48' />
+      <img src={logoUrl} alt='Apocentro' className='h-48 w-48 animate-pulse select-none pointer-events-none' />
     </main>
   )
 }
