@@ -30,9 +30,26 @@ export default function App() {
     if (account) {
       const keypair = generateKeypair(account.mnemonic)
       setIdentityKeypair(keypair)
-      ensureNotificationPermission()
     } else {
       setIdentityKeypair(undefined)
+    }
+  }, [account])
+
+  // Mobile browsers reject Notification.requestPermission() unless it is called
+  // from a real user gesture, so ask on the first tap/click after sign-in.
+  React.useEffect(() => {
+    if (!account) return
+    if (typeof Notification === 'undefined' || Notification.permission !== 'default') return
+    const ask = () => {
+      ensureNotificationPermission()
+      window.removeEventListener('pointerdown', ask)
+      window.removeEventListener('keydown', ask)
+    }
+    window.addEventListener('pointerdown', ask)
+    window.addEventListener('keydown', ask)
+    return () => {
+      window.removeEventListener('pointerdown', ask)
+      window.removeEventListener('keydown', ask)
     }
   }, [account])
 

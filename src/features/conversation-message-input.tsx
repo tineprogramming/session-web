@@ -368,11 +368,16 @@ export function ConversationMessageInput({ conversationID, onSent }: {
             size='icon'
             variant='secondary'
             className={cx('mb-2 touch-none select-none', recording && (cancelArmed ? 'bg-red-600 text-white scale-110' : 'bg-red-500 text-white scale-110'))}
+            style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
             disabled={uploading}
+            draggable={false}
             onPointerDown={handleMicDown}
+            onContextMenu={e => e.preventDefault()}
             title={t('recordVoice')}
           >
-            {uploading ? <ImSpinner2 className='animate-spin' /> : <MdMic />}
+            {uploading
+              ? <ImSpinner2 className='animate-spin pointer-events-none' />
+              : <MdMic className='pointer-events-none' />}
           </Button>
         )}
 
