@@ -152,24 +152,37 @@ export function ConversationMessageInput({ conversationID, onSent }: {
     cancelArmedRef.current = false
     pointerStartXRef.current = e.clientX
     setCancelArmed(false)
-    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* ignore */ }
     startRecording()
   }
-  const handleMicMove = (e: React.PointerEvent) => {
-    if (!holdingRef.current) return
-    const armed = e.clientX - pointerStartXRef.current < -60
-    if (armed !== cancelArmedRef.current) {
-      cancelArmedRef.current = armed
-      setCancelArmed(armed)
+
+  // Track move/release at the window level so it works regardless of pointer
+  // capture (touch and mouse), and even if the finger leaves the button.
+  React.useEffect(() => {
+    if (!recording) return
+    const onMove = (e: PointerEvent) => {
+      if (!holdingRef.current) return
+      const armed = e.clientX - pointerStartXRef.current < -60
+      if (armed !== cancelArmedRef.current) {
+        cancelArmedRef.current = armed
+        setCancelArmed(armed)
+      }
     }
-  }
-  const handleMicUp = (e: React.PointerEvent) => {
-    if (!holdingRef.current) return
-    holdingRef.current = false
-    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId) } catch { /* ignore */ }
-    if (cancelArmedRef.current) cancelRecording()
-    else stopRecording()
-  }
+    const onUp = () => {
+      if (!holdingRef.current) return
+      holdingRef.current = false
+      if (cancelArmedRef.current) cancelRecording()
+      else stopRecording()
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording])
 
   const handleSendMessage = async (override?: { pointer: AttachmentPointerWithUrl, blob: Blob }) => {
     if (!account) return
@@ -357,9 +370,6 @@ export function ConversationMessageInput({ conversationID, onSent }: {
             className={cx('mb-2 touch-none select-none', recording && (cancelArmed ? 'bg-red-600 text-white scale-110' : 'bg-red-500 text-white scale-110'))}
             disabled={uploading}
             onPointerDown={handleMicDown}
-            onPointerMove={handleMicMove}
-            onPointerUp={handleMicUp}
-            onPointerCancel={cancelRecording}
             title={t('recordVoice')}
           >
             {uploading ? <ImSpinner2 className='animate-spin' /> : <MdMic />}
