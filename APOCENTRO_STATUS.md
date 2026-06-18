@@ -18,9 +18,25 @@ the project baseline, including the 38-language locale set and CI workflows.
 | — | **Apocentro branding** (logo, icons, OGP, manifest, metadata, README) | ✅ Done | `public/*`, `src/assets/apocentro-logo.png`, `index.html`, `src/widgets/{loader,session-web-info}.tsx` |
 | §4 | **File attachments** (per-file AES-256-GCM, upload/download proxy, UI) | ✅ Done | `src/shared/api/attachments.ts`, `proxy/src/index.ts` (`/upload`, `/download`), message input + bubble + poll |
 | §3.9 | **Onion path display** (You → Guard → Middle → Swarm → Recipient, GeoIP flags) | ✅ Done | `proxy/src/index.ts` (`/path`), `src/shared/api/onion-path.ts`, `src/widgets/path-display.tsx` |
+| — | **Group chat** (private groups via DM fan-out + GroupContext) | ✅ Done | `VisibleMessage.ts`, `messages` fan-out in `conversation-message-input.tsx`, `poll.ts`, `new-conversation.tsx` |
+| — | **Deploy config** (Cloudflare Pages frontend + Render/Docker proxy) | ✅ Done | `DEPLOY.md`, `render.yaml`, `proxy/Dockerfile` |
 
 All of the above were verified with a full production build (`bun run build`)
-and the proxy with a transpile check.
+and the proxy with a transpile check. The proxy was also run live: it bootstrapped
+1039 snodes from the Session network and `/path` returned real GeoIP-annotated hops.
+
+### Group chat — how it works
+
+A group is a local conversation keyed by a synthetic 16-byte hex `groupId`.
+Sending fans the proven `sendMessage` out to every other member, each message
+carrying a `GroupContext` (full roster including self), so magic bytes and
+attachments apply unchanged. Each send's self-sync hash is recorded in
+`messages_seen` so loopback copies aren't duplicated; the outgoing row is stored
+once under the `groupId`. On receive, the poller reads `GroupContext`, upserts
+the `ClosedGroup` conversation (roster minus self), and threads messages by
+`groupId`. Group members are entered as raw `05…` Session IDs.
+
+*Known v1 limitation:* your own group messages don't sync to your other devices.
 
 ### Magic bytes — exact behaviour
 
