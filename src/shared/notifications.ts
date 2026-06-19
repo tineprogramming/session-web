@@ -11,6 +11,28 @@ export async function ensureNotificationPermission(): Promise<void> {
   }
 }
 
+/** Request permission (if needed) and fire a test notification. */
+export async function showTestNotification(): Promise<'granted' | 'denied' | 'unsupported'> {
+  if (typeof Notification === 'undefined') return 'unsupported'
+  if (Notification.permission === 'default') {
+    try { await Notification.requestPermission() } catch { /* ignore */ }
+  }
+  if (Notification.permission !== 'granted') return 'denied'
+  const options: NotificationOptions = {
+    body: 'Notifications are working 🎉',
+    icon: BASE + 'android-chrome-192x192.png',
+    badge: BASE + 'favicon-32x32.png',
+    tag: 'apc-test',
+    data: { url: BASE },
+  }
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration()
+    if (reg) { await reg.showNotification('Apocentro', options); return 'granted' }
+  } catch { /* fall through */ }
+  try { new Notification('Apocentro', options) } catch { /* ignore */ }
+  return 'granted'
+}
+
 export async function notifyIncomingMessage(opts: {
   title: string
   body: string

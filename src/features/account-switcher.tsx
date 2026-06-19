@@ -13,8 +13,10 @@ import { selectAccount, setAccount, setAuthorized } from '@/shared/store/slices/
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/ui/avatar'
 import cx from 'classnames'
 import { useTranslation } from 'react-i18next'
-import { LogOutIcon, PlusIcon, PencilIcon } from 'lucide-react'
+import { LogOutIcon, PlusIcon, PencilIcon, BellIcon } from 'lucide-react'
 import { formatSessionID } from '@/shared/utils'
+import { showTestNotification } from '@/shared/notifications'
+import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertDialog,
@@ -67,6 +69,11 @@ export function AccountSwitcher({ isCollapsed }: {
       setLogoutWarningDialog(selectedAccount.sessionID)
     } else if(key === 'editname') {
       setNameDialogOpen(true)
+    } else if(key === 'notifications') {
+      const r = await showTestNotification()
+      if (r === 'granted') toast.success(t('notificationsEnabled'))
+      else if (r === 'denied') toast.error(t('notificationsBlocked'))
+      else toast.error(t('notificationsUnsupported'))
     } else {
       const newSessionID = key
       const dbAccount = await db.accounts.get(newSessionID)
@@ -128,6 +135,12 @@ export function AccountSwitcher({ isCollapsed }: {
           <div className="flex items-center gap-3 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0 [&_svg]:text-foreground">
             <PencilIcon />
             {t('setYourName')}
+          </div>
+        </SelectItem>
+        <SelectItem value='notifications'>
+          <div className="flex items-center gap-3 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0 [&_svg]:text-foreground">
+            <BellIcon />
+            {t('testNotifications')}
           </div>
         </SelectItem>
         <SelectItem value='new'>
