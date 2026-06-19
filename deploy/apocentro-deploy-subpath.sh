@@ -112,6 +112,15 @@ location ${BASE} {
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     proxy_read_timeout 120s;
     client_max_body_size 25m;
+
+    # Compress the (uncompressed) responses from the Bun upstream so the large
+    # JS/wasm bundles don't crawl over slow mobile connections (~4x smaller).
+    gzip on;
+    gzip_proxied any;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_vary on;
+    gzip_types application/javascript text/javascript text/css application/json application/wasm image/svg+xml font/woff2;
 }
 NGINX
 
