@@ -10,7 +10,7 @@ import { Conversation, ConversationRef } from '@/widgets/conversation'
 import { ConversationMessageInput } from '@/features/conversation-message-input'
 import { GroupSettingsDialog } from '@/widgets/group-settings'
 import { ConversationType } from '@/shared/api/conversations'
-import { MdEdit, MdGroup } from 'react-icons/md'
+import { MdEdit, MdGroup, MdArrowBack } from 'react-icons/md'
 import { useTranslation } from 'react-i18next'
 
 export function ConversationPage() {
@@ -69,6 +69,13 @@ export function ConversationPage() {
   return (
     <div className='flex flex-col flex-1 h-full'>
       <div className="flex items-center gap-2 px-4 py-2 h-14 shrink-0">
+        <button
+          onClick={() => navigate('/')}
+          title="Back"
+          className="md:hidden text-neutral-300 hover:text-white shrink-0 -ml-1"
+        >
+          <MdArrowBack className="w-5 h-5" />
+        </button>
         {editingName ? (
           <input
             autoFocus
