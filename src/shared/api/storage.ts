@@ -24,6 +24,8 @@ export type DbConversation = {
     textContent: string | null
   } | null
   lastMessageTime: number
+  /** Set when you left the group or were removed: read-only, composer hidden. Not indexed. */
+  left?: boolean
 } & Conversation
 
 export type DbAttachment = {
@@ -49,6 +51,8 @@ export type DbMessage = {
   sendingStatus: 'sending' | 'error' | 'sent'
   /** For group messages: the Session ID of the sender. Not indexed, undefined for DMs. */
   senderID?: string
+  /** Centered "X added", "Y left" notices rather than a chat bubble. Not indexed. */
+  system?: boolean
 }
 
 export type DbUser = {

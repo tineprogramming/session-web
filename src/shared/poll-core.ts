@@ -22,6 +22,16 @@ function isKeyCollision(e: unknown): boolean {
   return name === 'BulkError' || name === 'ConstraintError'
 }
 
+// GroupContext.Type (signal-service proto): a UPDATE/QUIT message changes
+// membership rather than carrying chat content.
+const GROUP_UPDATE = 1
+const GROUP_QUIT = 3
+
+const shortId = (id: string) => `${id.slice(0, 6)}…${id.slice(-4)}`
+async function nameOf(id: string): Promise<string> {
+  return (await db.users.get(id))?.displayName || shortId(id)
+}
+
 async function downloadMessageAttachments(
   pointers: { url?: string | null, id?: unknown, key?: Uint8Array | null, digest?: Uint8Array | null, contentType?: string | null, fileName?: string | null, size?: number | null }[]
 ): Promise<DbAttachment[] | undefined> {
@@ -73,6 +83,11 @@ export async function runPoll(opts: {
 
       if (group) {
         const groupId = toHex(group.id!)
+        // Membership-change messages are rendered as system notices below, not
+        // as chat bubbles.
+        if (group.type === GROUP_UPDATE || group.type === GROUP_QUIT) {
+          return null
+        }
         if (!body && !rawAttachments.length) {
           return null
         }
@@ -160,32 +175,89 @@ export async function runPoll(opts: {
 
     if (group) {
       const groupId = toHex(group.id!)
+      const direction = (msg.to ? 'outgoing' : 'incoming') as 'incoming' | 'outgoing'
+      const sender = msg.envelope.source
+      const rawRoster = group.members ?? []
+      const isQuit = group.type === GROUP_QUIT
+      const isUpdate = group.type === GROUP_UPDATE
       const existingConvo = await db.conversations.get({ sessionID: groupId, accountSessionID: account.sessionID })
       const displayName = group.name || existingConvo?.displayName || 'Group'
-      const members = (group.members ?? [])
-        .filter(m => m !== account.sessionID)
-        .map(sessionID => ({ sessionID }))
-      const lastMessage = previewText !== null
-        ? { direction: (msg.to ? 'outgoing' : 'incoming') as 'incoming' | 'outgoing', textContent: previewText }
+
+      // An incoming UPDATE whose roster no longer lists us means we were removed.
+      const removedSelf = isUpdate && direction === 'incoming'
+        && rawRoster.length > 0 && !rawRoster.includes(account.sessionID)
+
+      // New member list (everyone but us). QUIT drops the sender.
+      let newMemberIds = rawRoster.filter(m => m !== account.sessionID)
+      if (isQuit) {
+        const base = existingConvo?.members.map(m => m.sessionID) ?? newMemberIds
+        newMemberIds = base.filter(id => id !== sender)
+      }
+      const members = _.uniq(newMemberIds).map(sessionID => ({ sessionID }))
+
+      // Build system notices for membership changes (incoming only — our own
+      // changes are inserted locally by the group-admin actions).
+      const systemTexts: string[] = []
+      if ((isUpdate || isQuit) && direction === 'incoming') {
+        if (isQuit) {
+          systemTexts.push(`${await nameOf(sender)} left the group`)
+        } else if (removedSelf) {
+          systemTexts.push('You were removed from the group')
+        } else if (!existingConvo) {
+          systemTexts.push('You were added to the group')
+        } else {
+          const oldIds = new Set(existingConvo.members.map(m => m.sessionID))
+          const newIds = new Set(members.map(m => m.sessionID))
+          for (const id of newIds) if (!oldIds.has(id) && id !== sender) systemTexts.push(`${await nameOf(id)} was added`)
+          for (const id of oldIds) if (!newIds.has(id)) systemTexts.push(`${await nameOf(id)} was removed`)
+        }
+      }
+      for (const text of systemTexts) {
+        try {
+          await db.messages.add({
+            direction: 'incoming',
+            conversationID: groupId,
+            hash: 'sys_' + uuid(),
+            accountSessionID,
+            senderID: sender,
+            textContent: text,
+            system: true,
+            read: Number(isActive(groupId)) as 0 | 1,
+            timestamp: msg.sentAtTimestamp,
+            sendingStatus: 'sent',
+            id: uuid(),
+          })
+        } catch (e) {
+          if (!isKeyCollision(e)) throw e
+        }
+      }
+
+      const preview = systemTexts.length ? systemTexts[systemTexts.length - 1] : previewText
+      const finalMembers = removedSelf ? (existingConvo?.members ?? members) : members
+      const lastMessage = preview !== null && preview !== undefined
+        ? { direction, textContent: preview }
         : existingConvo?.lastMessage ?? null
-      const lastMessageTime = previewText !== null
+      const lastMessageTime = preview !== null && preview !== undefined
         ? msg.sentAtTimestamp
         : existingConvo?.lastMessageTime ?? 0
+
       if (!existingConvo) {
+        if (removedSelf) continue // don't recreate a group we were just removed from
         await db.conversations.add({
           id: uuid(),
           type: ConversationType.ClosedGroup,
           accountSessionID,
           sessionID: groupId,
           displayName,
-          members,
+          members: finalMembers,
           lastMessage,
           lastMessageTime,
         })
       } else {
         await db.conversations.update(existingConvo.id, {
           displayName,
-          members,
+          members: finalMembers,
+          ...(removedSelf ? { left: true } : {}),
           lastMessage,
           lastMessageTime,
         } as Partial<DbConversation>)

@@ -8,7 +8,10 @@ import { selectAccount } from '@/shared/store/slices/account'
 import { formatSessionID } from '@/shared/utils'
 import { Conversation, ConversationRef } from '@/widgets/conversation'
 import { ConversationMessageInput } from '@/features/conversation-message-input'
-import { MdEdit } from 'react-icons/md'
+import { GroupSettingsDialog } from '@/widgets/group-settings'
+import { ConversationType } from '@/shared/api/conversations'
+import { MdEdit, MdGroup } from 'react-icons/md'
+import { useTranslation } from 'react-i18next'
 
 export function ConversationPage() {
   const account = useAppSelector(selectAccount)
@@ -46,8 +49,11 @@ export function ConversationPage() {
     conversationRef.current?.scrollToBottom()
   }
 
+  const { t } = useTranslation()
   const [editingName, setEditingName] = React.useState(false)
   const [nameDraft, setNameDraft] = React.useState('')
+  const [showGroupSettings, setShowGroupSettings] = React.useState(false)
+  const isGroup = conversation?.type === ConversationType.ClosedGroup
 
   const startEditName = () => {
     setNameDraft(conversation?.displayName ?? '')
@@ -83,6 +89,11 @@ export function ConversationPage() {
                 <MdEdit className="w-4 h-4" />
               </button>
             )}
+            {isGroup && (
+              <button onClick={() => setShowGroupSettings(true)} title={t('groupMembers')} className="text-neutral-500 hover:text-white shrink-0 ml-auto">
+                <MdGroup className="w-5 h-5" />
+              </button>
+            )}
           </>
         )}
       </div>
@@ -97,7 +108,18 @@ export function ConversationPage() {
           </form> */}
       {/* </div> */}
       {conversationID !== undefined && <Conversation conversationID={conversationID} ref={conversationRef} />}
-      {conversationID !== undefined && <ConversationMessageInput conversationID={conversationID} onSent={handleSent} />}
+      {conversationID !== undefined && (
+        conversation?.left
+          ? <div className='px-4 py-3 text-center text-sm text-muted-foreground border-t border-neutral-800'>{t('youLeftGroup')}</div>
+          : <ConversationMessageInput conversationID={conversationID} onSent={handleSent} />
+      )}
+      {showGroupSettings && isGroup && account && conversationID && (
+        <GroupSettingsDialog
+          groupID={conversationID}
+          accountSessionID={account.sessionID}
+          onClose={() => setShowGroupSettings(false)}
+        />
+      )}
     </div>
   )
 }

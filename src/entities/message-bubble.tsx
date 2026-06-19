@@ -14,6 +14,17 @@ export function MessageBubble({ msg }: {
   const { t } = useTranslation()
   const hasText = !!msg.textContent
   const hasAttachments = !!msg.attachments?.length
+
+  if (msg.system) {
+    return (
+      <div className='flex justify-center w-full my-1'>
+        <span className='text-[11px] text-muted-foreground bg-neutral-800/60 rounded-full px-3 py-0.5'>
+          {msg.textContent}
+        </span>
+      </div>
+    )
+  }
+
   return (
     <div className={cx('flex gap-2 w-full', {
       'justify-start': msg.direction === 'incoming',

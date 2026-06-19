@@ -73,7 +73,7 @@ export interface VisibleMessageParams extends ExpirableMessageParams {
   preview?: Array<PreviewWithAttachmentUrl>;
   reaction?: Reaction;
   syncTarget?: string; // undefined means it is not a synced message
-  group?: { id: Uint8Array; name?: string; members: string[]; type: 'UPDATE' | 'DELIVER' };
+  group?: { id: Uint8Array; name?: string; members: string[]; type: 'UPDATE' | 'DELIVER' | 'QUIT' };
 }
 
 export class VisibleMessage extends ExpirableMessage {
@@ -90,7 +90,7 @@ export class VisibleMessage extends ExpirableMessage {
   /// - Note: `null or undefined` if this isn't a sync message.
   private readonly syncTarget?: string
 
-  private readonly group?: { id: Uint8Array; name?: string; members: string[]; type: 'UPDATE' | 'DELIVER' }
+  private readonly group?: { id: Uint8Array; name?: string; members: string[]; type: 'UPDATE' | 'DELIVER' | 'QUIT' }
 
   constructor(params: VisibleMessageParams) {
     super({
@@ -144,7 +144,9 @@ export class VisibleMessage extends ExpirableMessage {
         id: this.group.id,
         type: this.group.type === 'UPDATE'
           ? SignalService.GroupContext.Type.UPDATE
-          : SignalService.GroupContext.Type.DELIVER,
+          : this.group.type === 'QUIT'
+            ? SignalService.GroupContext.Type.QUIT
+            : SignalService.GroupContext.Type.DELIVER,
         ...(this.group.name ? { name: this.group.name } : {}),
         members: this.group.members,
       })
