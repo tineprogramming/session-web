@@ -26,6 +26,8 @@ export type DbConversation = {
   lastMessageTime: number
   /** Set when you left the group or were removed: read-only, composer hidden. Not indexed. */
   left?: boolean
+  /** Present for real Session groups v2 (03-prefixed): member auth for the group swarm. Not indexed. */
+  groupV2?: { authData: string, invitedBy?: string }
 } & Conversation
 
 export type DbAttachment = {

@@ -50,6 +50,7 @@
   "removeMember": "Remove from group",
   "leaveGroup": "Leave group",
   "youLeftGroup": "You're no longer in this group",
+  "groupV2Pending": "Group from the app — reading & sending here is coming soon",
   "noMembers": "No members yet",
   "aboutOns": "View and register ONS names",
   "onsInvalid": "ONS name not found",

@@ -3,7 +3,7 @@
 // `window` so it can run inside a service worker for background notifications.
 
 import { ConversationType } from '@/shared/api/conversations'
-import { getNewMessages } from '@/shared/api/messages-receiver'
+import { getNewMessages, type NewMessage } from '@/shared/api/messages-receiver'
 import { DbAttachment, DbConversation, DbMessage, DbUser, db } from '@/shared/api/storage'
 import { getTargetSwarm } from '@/shared/nodes'
 import { downloadAndDecryptAttachment } from '@/shared/api/attachments'
@@ -30,6 +30,61 @@ const GROUP_QUIT = 3
 const shortId = (id: string) => `${id.slice(0, 6)}…${id.slice(-4)}`
 async function nameOf(id: string): Promise<string> {
   return (await db.users.get(id))?.displayName || shortId(id)
+}
+
+// Session groups v2 control messages (invite etc.). Phase 2 handles the invite
+// so an app-created group shows up on the web; polling the group swarm and
+// other control types come in a later phase.
+async function handleGroupV2Update(
+  msg: NewMessage,
+  accountSessionID: string,
+  isActive: (id: string) => boolean,
+): Promise<void> {
+  const gum = msg.content.dataMessage?.groupUpdateMessage
+  const invite = gum?.inviteMessage
+  if (!invite?.groupSessionId) return
+
+  const groupId = invite.groupSessionId // "03"-prefixed group identity pubkey
+  const name = invite.name || 'Group'
+  const authData = invite.memberAuthData ? toHex(invite.memberAuthData) : ''
+  const sender = msg.envelope.source
+  const existing = await db.conversations.get({ sessionID: groupId, accountSessionID })
+
+  if (!existing) {
+    await db.conversations.add({
+      id: uuid(),
+      type: ConversationType.ClosedGroup,
+      accountSessionID,
+      sessionID: groupId,
+      displayName: name,
+      members: [],
+      groupV2: { authData, invitedBy: sender },
+      lastMessage: { direction: 'incoming', textContent: 'Group invitation' },
+      lastMessageTime: msg.sentAtTimestamp,
+    })
+    try {
+      await db.messages.add({
+        direction: 'incoming',
+        conversationID: groupId,
+        hash: 'sys_' + uuid(),
+        accountSessionID,
+        senderID: sender,
+        textContent: `You were invited to "${name}"`,
+        system: true,
+        read: Number(isActive(groupId)) as 0 | 1,
+        timestamp: msg.sentAtTimestamp,
+        sendingStatus: 'sent',
+        id: uuid(),
+      })
+    } catch (e) {
+      if (!isKeyCollision(e)) throw e
+    }
+  } else {
+    await db.conversations.update(existing.id, {
+      displayName: name || existing.displayName,
+      groupV2: { authData, invitedBy: sender },
+    } as Partial<DbConversation>)
+  }
 }
 
 async function downloadMessageAttachments(
@@ -71,8 +126,18 @@ export async function runPoll(opts: {
   const targetSwarm = await getTargetSwarm()
 
   const messages = await getNewMessages(targetSwarm)
-  const dataMessages = messages.filter(msg => msg.content.dataMessage)
   const accountSessionID = account.sessionID
+
+  // Session groups v2 control messages (invites etc.) arrive on our DM swarm
+  // inside dataMessage.groupUpdateMessage. Handle them separately and keep them
+  // out of normal chat processing.
+  const allData = messages.filter(msg => msg.content.dataMessage)
+  for (const msg of allData) {
+    if (msg.content.dataMessage?.groupUpdateMessage && !msg.to) {
+      await handleGroupV2Update(msg, accountSessionID, isActive)
+    }
+  }
+  const dataMessages = allData.filter(msg => !msg.content.dataMessage?.groupUpdateMessage)
 
   const messagesToAddRaw = await Promise.all(
     dataMessages.map(async msg => {

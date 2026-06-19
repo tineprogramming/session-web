@@ -53,7 +53,8 @@ export function ConversationPage() {
   const [editingName, setEditingName] = React.useState(false)
   const [nameDraft, setNameDraft] = React.useState('')
   const [showGroupSettings, setShowGroupSettings] = React.useState(false)
-  const isGroup = conversation?.type === ConversationType.ClosedGroup
+  const isV2Group = !!conversation?.groupV2
+  const isGroup = conversation?.type === ConversationType.ClosedGroup && !isV2Group
 
   const startEditName = () => {
     setNameDraft(conversation?.displayName ?? '')
@@ -118,7 +119,9 @@ export function ConversationPage() {
       {conversationID !== undefined && (
         conversation?.left
           ? <div className='px-4 py-3 text-center text-sm text-muted-foreground border-t border-neutral-800'>{t('youLeftGroup')}</div>
-          : <ConversationMessageInput conversationID={conversationID} onSent={handleSent} />
+          : isV2Group
+            ? <div className='px-4 py-3 text-center text-sm text-muted-foreground border-t border-neutral-800'>{t('groupV2Pending')}</div>
+            : <ConversationMessageInput conversationID={conversationID} onSent={handleSent} />
       )}
       {showGroupSettings && isGroup && account && conversationID && (
         <GroupSettingsDialog
