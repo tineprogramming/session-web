@@ -13,6 +13,11 @@ import { I18nLoader } from '@/app/i18n-loader'
 
 const AppComponent = React.lazy(() => import('@/app/app.tsx'))
 
+// Diagnostic hook (lazy, no cost unless called) for verifying libsession-wasm
+// loads in the browser while groups v2 is being built.
+;(window as unknown as { __apcLibsession?: () => Promise<unknown> }).__apcLibsession =
+  () => import('@/shared/api/groups-v2/libsession').then(m => m.getLibsession())
+
 // Register the PWA service worker (notifications + installability).
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

@@ -23,6 +23,7 @@
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-tooltip": "^1.0.7",
     "@reduxjs/toolkit": "^2.2.3",
+    "@session-foundation/libsession-wasm": "^0.0.10",
     "@types/bun": "^1.1.0",
     "argon2-browser": "^1.18.0",
     "blake2b": "^2.1.4",
