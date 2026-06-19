@@ -62,6 +62,8 @@ cat > "/etc/systemd/system/${SERVICE}.service" <<UNIT
 Description=Apocentro (Session forwarder + frontend)
 After=network-online.target
 Wants=network-online.target
+# Never stop restarting on crash loops (default would give up after 5 in 10s).
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -70,7 +72,7 @@ Environment=PORT=${PROXY_PORT}
 Environment=FRONTEND_DIST=${REPO_DIR}/dist
 ExecStart=${BUN_BIN} run ${REPO_DIR}/proxy/src/index.ts
 Restart=always
-RestartSec=3
+RestartSec=2
 User=root
 
 [Install]
@@ -78,6 +80,8 @@ WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
 systemctl enable "${SERVICE}"
+# Clear any prior start-limit-hit/failed state so restart always succeeds.
+systemctl reset-failed "${SERVICE}" 2>/dev/null || true
 systemctl restart "${SERVICE}"
 
 # Confirm the proxy actually came up on its port (it bootstraps snodes first).

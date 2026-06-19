@@ -10,6 +10,11 @@ import { getSwarms } from './swarms'
 import { sendMessageDataToSnode } from './store-message'
 import { RetryWithOtherNode421Error } from './utils/errors'
 
+// Keep the proxy alive: a single unhandled rejection (e.g. a transient snode
+// fetch failure in a background task) must never take down the whole server.
+process.on('uncaughtException', (e) => console.error('[proxy] uncaughtException', e))
+process.on('unhandledRejection', (e) => console.error('[proxy] unhandledRejection', e))
+
 const server = bunrest()
 
 server.use(cors({
