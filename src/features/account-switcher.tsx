@@ -118,7 +118,7 @@ export function AccountSwitcher({ isCollapsed }: {
         aria-label="Select account"
       >
         <SelectValue placeholder="Select an account">
-          <Avatar className='w-[24px] h-[24px] text-neutral-400 font-semibold text-xs'>
+          <Avatar className='w-[36px] h-[36px] lg:w-[24px] lg:h-[24px] text-neutral-400 font-semibold text-xs'>
             {avatar && <AvatarImage src={avatar} alt={selectedAccount.displayName || selectedAccount.sessionID} />}
             <AvatarFallback>{trimmedDisplayName.toUpperCase()}</AvatarFallback>
           </Avatar>
