@@ -23,6 +23,7 @@ import { toast } from 'sonner'
 import { t } from 'i18next'
 import { ensureNotificationPermission } from '@/shared/notifications'
 import { enableBackgroundSync, disableBackgroundSync } from '@/shared/background-sync'
+import { retryFailedMessages } from '@/shared/api/resend'
 
 export default function App() {
   const account = useAppSelector(selectAccount)
@@ -68,6 +69,14 @@ export default function App() {
         clearInterval(pollInterval)
       }
     }
+  }, [account])
+
+  // Auto-retry failed outgoing messages when the network comes back.
+  React.useEffect(() => {
+    if (!account) return
+    const onOnline = () => { retryFailedMessages(account.sessionID) }
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
   }, [account])
 
   React.useEffect(() => {

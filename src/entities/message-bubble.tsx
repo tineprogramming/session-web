@@ -1,7 +1,9 @@
 import { DbAttachment, DbMessage } from '@/shared/api/storage'
 import { isImageAttachment } from '@/shared/api/attachments'
+import { resendMessage } from '@/shared/api/resend'
 import cx from 'classnames'
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { ImSpinner2 } from 'react-icons/im'
 import { IoIosWarning } from 'react-icons/io'
 import { MdFileDownload } from 'react-icons/md'
@@ -9,6 +11,7 @@ import { MdFileDownload } from 'react-icons/md'
 export function MessageBubble({ msg }: {
   msg: DbMessage
 }) {
+  const { t } = useTranslation()
   const hasText = !!msg.textContent
   const hasAttachments = !!msg.attachments?.length
   return (
@@ -21,7 +24,16 @@ export function MessageBubble({ msg }: {
         'justify-end': msg.direction === 'outgoing',
       })}>
         {msg.direction === 'outgoing' && msg.sendingStatus === 'sending' && <span className='animate-spin origin-center w-2 h-2 self-end'><ImSpinner2 className='w-2 h-2' /></span>}
-        {msg.direction === 'outgoing' && msg.sendingStatus === 'error' && <span className='w-4 h-4 self-end text-orange-600'><IoIosWarning className='w-4 h-4' /></span>}
+        {msg.direction === 'outgoing' && msg.sendingStatus === 'error' && (
+          <button
+            type='button'
+            onClick={() => resendMessage(msg)}
+            title={t('tapToResend')}
+            className='w-4 h-4 self-end text-orange-600 hover:text-orange-500 cursor-pointer'
+          >
+            <IoIosWarning className='w-4 h-4' />
+          </button>
+        )}
         <div className={cx('px-3 py-[6px] rounded-2xl break-words w-fit max-w-[min(430px,100%)]', {
           'bg-conversation-bubble': msg.direction === 'incoming',
           'bg-brand text-black': msg.direction === 'outgoing',

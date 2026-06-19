@@ -33,6 +33,7 @@
   "today": "Today",
   "typeMessagePlaceholder": "Your message...",
   "storeMessageError": "Couldn't send message",
+  "tapToResend": "Failed to send — tap to resend",
   "newConversationDm": "New Message",
   "newConversationGroup": "New Group",
   "joinCommunity": "Join Community",
