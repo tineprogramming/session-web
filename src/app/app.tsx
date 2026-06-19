@@ -19,6 +19,8 @@ import { poll } from '@/shared/poll'
 import { MainWrapper } from '@/widgets/main-wrapper'
 import { resetTargetNode, resetTargetSwarm } from '@/shared/nodes'
 import { NewConversationPage } from '@/pages/new-conversation'
+import { NetworkPage } from '@/pages/network'
+import { SettingsPage } from '@/pages/settings'
 import { toast } from 'sonner'
 import { t } from 'i18next'
 import { ensureNotificationPermission } from '@/shared/notifications'
@@ -95,6 +97,8 @@ export default function App() {
         <Routes>
           <Route path='/' element={<ProtectedRoute><MainWrapper /></ProtectedRoute>}>
             <Route path='/' element={<HomePage />} />
+            <Route path='/network' element={<NetworkPage />} />
+            <Route path='/settings' element={<SettingsPage />} />
             <Route path='/conversation/new' element={<NewConversationPage />} />
             <Route path='/conversation/:id' element={<ConversationPage />} />
           </Route>
