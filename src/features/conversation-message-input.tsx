@@ -253,7 +253,7 @@ export function ConversationMessageInput({ conversationID, onSent }: {
           const r = await sendMessage(member, messageInstance, syncMessage)
           if (r.ok) {
             anyOk = true
-            await db.messages_seen.add({
+            await db.messages_seen.put({
               hash: r.syncHash,
               receivedAt: timestamp,
               accountSessionID: account.sessionID
@@ -310,14 +310,17 @@ export function ConversationMessageInput({ conversationID, onSent }: {
       const result = await sendMessage(conversationID, messageInstance, syncMessage)
       if (result.ok) {
         await db.messages.update(tempHash, {
-          ...(result.ok && { hash: result.syncHash }),
-          sendingStatus: result.ok ? 'sent' : 'error'
+          hash: result.syncHash,
+          sendingStatus: 'sent'
         })
-        await db.messages_seen.add({
+        await db.messages_seen.put({
           hash: result.syncHash,
           receivedAt: timestamp,
           accountSessionID: account.sessionID
         })
+      } else {
+        // Mark it failed instead of leaving it stuck on the "sending" spinner.
+        await db.messages.update(tempHash, { sendingStatus: 'error' })
       }
     }
   }
