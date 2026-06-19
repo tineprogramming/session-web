@@ -19,7 +19,7 @@ name: Deploy to server (SSH)
 # copy. Normal commits are skipped (not failed).
 on:
   push:
-    branches: [claude/apocentro-web-recovery-q13fec]
+    branches: [claude/apocentro-web-recovery-q13fec, main, master]
   workflow_dispatch:
     inputs:
       domain:
@@ -52,18 +52,22 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           command_timeout: 30m
-          envs: GH_TOKEN,NGINX_CONF,URL_PATH
+          envs: GH_TOKEN,NGINX_CONF,URL_PATH,DEPLOY_REPO,DEPLOY_REF
           script: |
             set -euo pipefail
             export DEBIAN_FRONTEND=noninteractive
             command -v git >/dev/null 2>&1 || { apt-get update -y && apt-get install -y git; }
             rm -rf /opt/apocentro
-            git clone --depth 1 -b claude/apocentro-web-recovery-q13fec \
-              "https://x-access-token:${GH_TOKEN}@github.com/tineprogramming/session-web.git" \
+            # Portable: clone whichever repo/branch triggered this run, so the
+            # workflow keeps working unchanged if you move to your own repo.
+            git clone --depth 1 -b "${DEPLOY_REF}" \
+              "https://x-access-token:${GH_TOKEN}@github.com/${DEPLOY_REPO}.git" \
               /opt/apocentro
             cd /opt/apocentro
             bash deploy/apocentro-deploy-subpath.sh "$NGINX_CONF" "$URL_PATH"
         env:
           GH_TOKEN: ${{ github.token }}
+          DEPLOY_REPO: ${{ github.repository }}
+          DEPLOY_REF: ${{ github.ref_name }}
           NGINX_CONF: ${{ vars.NGINX_CONF || '/etc/nginx/sites-enabled/tinestuff.com' }}
           URL_PATH: ${{ vars.URL_PATH || 'apocentro' }}
