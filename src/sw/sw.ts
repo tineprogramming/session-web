@@ -55,6 +55,9 @@ async function backgroundPoll(): Promise<void> {
   if (polling) return
   polling = true
   try {
+    // If a page is open and visible it is already polling — don't race it.
+    const clients = await self.clients.matchAll({ type: 'window' })
+    if (clients.some(c => (c as WindowClient).visibilityState === 'visible')) return
     const creds = await loadCreds()
     if (!creds) return
     await sodium.ready

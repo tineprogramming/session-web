@@ -10,10 +10,22 @@ function isActiveConversation(conversationID: string): boolean {
   return !!m && m[1] === conversationID
 }
 
+let inFlight = false
+
 export async function poll() {
+  if (inFlight) return // don't let a slow poll overlap the next interval tick
   const account = selectAccount(store.getState())
   if (!account) return
 
+  inFlight = true
+  try {
+    await doPoll(account)
+  } finally {
+    inFlight = false
+  }
+}
+
+async function doPoll(account: { sessionID: string, mnemonic: string }) {
   await runPoll({
     account,
     isActiveConversation,

@@ -14,6 +14,14 @@ import { v4 as uuid } from 'uuid'
 export type PollNotification = { title: string, body: string, conversationID: string }
 export type PollNotifier = (n: PollNotification) => void | Promise<void>
 
+// The page poll (every 10s) and the service-worker background poll can run
+// concurrently and fetch the same messages before either marks them seen. Dexie
+// still inserts the non-colliding rows, so a key collision is safe to ignore.
+function isKeyCollision(e: unknown): boolean {
+  const name = (e as { name?: string } | null)?.name
+  return name === 'BulkError' || name === 'ConstraintError'
+}
+
 async function downloadMessageAttachments(
   pointers: { url?: string | null, id?: unknown, key?: Uint8Array | null, digest?: Uint8Array | null, contentType?: string | null, fileName?: string | null, size?: number | null }[]
 ): Promise<DbAttachment[] | undefined> {
@@ -103,7 +111,11 @@ export async function runPoll(opts: {
     })
   )
   const messagesToAdd = messagesToAddRaw.filter(Boolean) as DbMessage[]
-  await db.messages.bulkAdd(messagesToAdd)
+  try {
+    await db.messages.bulkAdd(messagesToAdd)
+  } catch (e) {
+    if (!isKeyCollision(e)) throw e
+  }
 
   // Notify for newly received incoming messages.
   if (opts.notify) {
@@ -133,7 +145,11 @@ export async function runPoll(opts: {
       profiles.push(profile)
     }
   }
-  await db.users.bulkAdd(profiles)
+  try {
+    await db.users.bulkAdd(profiles)
+  } catch (e) {
+    if (!isKeyCollision(e)) throw e
+  }
 
   for (const msg of dataMessages) {
     const group = msg.content.dataMessage?.group

@@ -111,14 +111,11 @@ export async function isMessageSeen(hash: string) {
 export async function setMessageSeen(hash: string) {
   const keypair = getIdentityKeyPair()
   if (!keypair) throw new Error('No identity keypair found')
-  console.log({
+  // put (not add) so concurrent pollers (page + service worker) racing on the
+  // same hash don't throw a ConstraintError.
+  await db.messages_seen.put({
     hash,
     receivedAt: Date.now(),
-    accountSessionID: toHex(keypair.pubKey)
-  })
-  await db.messages_seen.add({ 
-    hash, 
-    receivedAt: Date.now(), 
     accountSessionID: toHex(keypair.pubKey)
   })
 }
