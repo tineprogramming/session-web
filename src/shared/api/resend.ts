@@ -92,8 +92,9 @@ export async function resendMessage(message: DbMessage): Promise<boolean> {
     })
     const result = await sendMessage(conversationID, messageInstance, syncMessage)
     if (result.ok) {
-      await db.messages.update(message.hash, { hash: result.syncHash, sendingStatus: 'sent' })
       await db.messages_seen.put({ hash: result.syncHash, receivedAt: timestamp, accountSessionID })
+      // Keep the existing primary key (Dexie throws on a primary-key update).
+      await db.messages.update(message.hash, { sendingStatus: 'sent' })
       return true
     }
     await db.messages.update(message.hash, { sendingStatus: 'error' })

@@ -309,15 +309,15 @@ export function ConversationMessageInput({ conversationID, onSent }: {
 
       const result = await sendMessage(conversationID, messageInstance, syncMessage)
       if (result.ok) {
-        await db.messages.update(tempHash, {
-          hash: result.syncHash,
-          sendingStatus: 'sent'
-        })
+        // Dedupe our own sync copy first (must not depend on the update below).
         await db.messages_seen.put({
           hash: result.syncHash,
           receivedAt: timestamp,
           accountSessionID: account.sessionID
         })
+        // NOTE: do not change the primary key (hash) here — Dexie throws on a
+        // primary-key update, which left attachment messages stuck on "sending".
+        await db.messages.update(tempHash, { sendingStatus: 'sent' })
       } else {
         // Mark it failed instead of leaving it stuck on the "sending" spinner.
         await db.messages.update(tempHash, { sendingStatus: 'error' })
