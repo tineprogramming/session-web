@@ -360,7 +360,7 @@ export function ConversationMessageInput({ conversationID, onSent }: {
           onKeyDown={handleKeyDown}
           minRows={1}
           maxRows={5}
-          className='rounded-none outline-none flex-1 min-w-0 p-4 placeholder:text-neutral-500 text-sm bg-none resize-none transition-[height] [&::-webkit-scrollbar]:hidden h-[52px]'
+          className='rounded-none outline-none flex-1 min-w-0 p-4 placeholder:text-neutral-500 text-base lg:text-sm bg-none resize-none transition-[height] [&::-webkit-scrollbar]:hidden h-[52px]'
         />
         {message.trim() || attachment ? (
           <Button size='icon' variant='secondary' className='mb-2' onClick={() => handleSendMessage()} title={t('send')}>
