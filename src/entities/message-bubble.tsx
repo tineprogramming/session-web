@@ -18,7 +18,7 @@ export function MessageBubble({ msg }: {
   if (msg.system) {
     return (
       <div className='flex justify-center w-full my-1'>
-        <span className='text-[13px] lg:text-[11px] text-muted-foreground bg-neutral-800/60 rounded-full px-3 py-0.5'>
+        <span className='text-sm lg:text-[11px] text-muted-foreground bg-neutral-800/60 rounded-full px-3 py-0.5'>
           {msg.textContent}
         </span>
       </div>
@@ -50,7 +50,7 @@ export function MessageBubble({ msg }: {
           'bg-brand text-black': msg.direction === 'outgoing',
         })}>
           {msg.senderID && msg.direction === 'incoming' && (
-            <div className='text-muted-foreground text-[12px] lg:text-[10px] leading-3 pt-0.5'>
+            <div className='text-muted-foreground text-xs lg:text-[10px] leading-3 pt-0.5'>
               {msg.senderID.slice(0, 6)}...{msg.senderID.slice(-4)}
             </div>
           )}
@@ -62,7 +62,7 @@ export function MessageBubble({ msg }: {
             </div>
           )}
           {(hasText || !hasAttachments) && (
-            <div className='text-[15px] leading-5 lg:text-[13px] lg:leading-4 font-normal whitespace-pre-wrap'>{msg.textContent} <Timestamp
+            <div className='text-base leading-snug lg:text-[13px] lg:leading-4 font-normal whitespace-pre-wrap'>{msg.textContent} <Timestamp
               timestamp={msg.timestamp}
               className={msg.direction === 'incoming' ? 'text-muted-foreground' : 'text-green-700'}
             /></div>
@@ -100,7 +100,7 @@ function Attachment({ attachment, direction }: {
     <a
       href={url}
       download={attachment.fileName ?? 'file'}
-      className={cx('flex items-center gap-2 text-[15px] lg:text-[13px] underline-offset-2 hover:underline py-1', {
+      className={cx('flex items-center gap-2 text-base lg:text-[13px] underline-offset-2 hover:underline py-1', {
         'text-black': direction === 'outgoing',
       })}
     >
@@ -115,7 +115,7 @@ function Timestamp({ timestamp, className }: {
   className: string
 }) {
   return (
-    <span className={cx('text-[12px] lg:text-[11px] pointer-events-none select-none ml-2 float-right mt-[2px]', className)}>
+    <span className={cx('text-xs lg:text-[11px] pointer-events-none select-none ml-2 float-right mt-[2px]', className)}>
       {Intl.DateTimeFormat('ru-RU', {
         hour: '2-digit',
         minute: '2-digit'
