@@ -80,6 +80,8 @@ export default function App() {
   }, [account])
 
   React.useEffect(() => {
+    // App chunk loaded successfully — reset the stale-deploy reload guard.
+    sessionStorage.removeItem('apc-chunk-reloaded')
     if (window.shimmedIndexedDb) {
       toast.warning(t('indexedDbNotAvailable'))
     }

@@ -13,6 +13,22 @@ import { I18nLoader } from '@/app/i18n-loader'
 
 const AppComponent = React.lazy(() => import('@/app/app.tsx'))
 
+// Self-heal stale deploys: if a lazily-imported chunk fails to load (the page
+// was opened before a redeploy and references now-deleted chunk hashes),
+// hard-reload once to fetch the current assets instead of showing an error.
+function reloadOnceForChunkError() {
+  if (sessionStorage.getItem('apc-chunk-reloaded')) return
+  sessionStorage.setItem('apc-chunk-reloaded', '1')
+  window.location.reload()
+}
+window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); reloadOnceForChunkError() })
+window.addEventListener('unhandledrejection', (e) => {
+  const msg = String((e as PromiseRejectionEvent)?.reason?.message || (e as PromiseRejectionEvent)?.reason || '')
+  if (/dynamically imported module|Importing a module script failed|error loading dynamically/i.test(msg)) {
+    reloadOnceForChunkError()
+  }
+})
+
 // Diagnostic hook (lazy, no cost unless called) for verifying libsession-wasm
 // loads in the browser while groups v2 is being built.
 ;(window as unknown as { __apcLibsession?: () => Promise<unknown> }).__apcLibsession =

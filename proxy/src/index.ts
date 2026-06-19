@@ -515,10 +515,22 @@ Bun.serve({
     // Everything else -> static frontend (SPA) with cross-origin isolation.
     const rel = path === '/' ? '/index.html' : path
     let file = Bun.file(FRONTEND_DIST + rel)
+    let isFallback = false
     if (!(await file.exists())) {
       file = Bun.file(FRONTEND_DIST + '/index.html') // SPA fallback
+      isFallback = true
     }
-    return new Response(file, { headers: COI_HEADERS })
+    // Content-hashed assets can be cached forever; HTML/sw.js must always
+    // revalidate so a redeploy's new chunk hashes take effect immediately
+    // (otherwise a stale index.html references deleted chunks -> blank page).
+    const cacheable = !isFallback && path.startsWith('/assets/')
+    const headers: Record<string, string> = {
+      ...COI_HEADERS,
+      'Cache-Control': cacheable
+        ? 'public, max-age=31536000, immutable'
+        : 'no-cache, must-revalidate',
+    }
+    return new Response(file, { headers })
   },
 })
 console.log('Apocentro (frontend + API) listening on port ' + PUBLIC_PORT)
