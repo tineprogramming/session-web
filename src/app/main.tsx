@@ -15,6 +15,13 @@ import { setLoadProgress } from '@/shared/load-progress'
 
 setLoadProgress(10) // boot started (entry chunk downloaded + executing)
 
+// Warm the two heavy chunks in parallel right away. Otherwise they load in a
+// waterfall — libsodium (loaded by SodiumLoader) finishes before the app chunk
+// even starts — which is slow on high-latency mobile links. HTTP/2 multiplexes
+// these, and React.lazy reuses the in-flight module promises.
+void import('libsodium-wrappers-sumo')
+void import('@/app/app.tsx')
+
 const AppComponent = React.lazy(() =>
   import('@/app/app.tsx').then(m => { setLoadProgress(88); return m }))
 
