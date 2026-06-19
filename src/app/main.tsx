@@ -15,17 +15,26 @@ const AppComponent = React.lazy(() => import('@/app/app.tsx'))
 
 // Self-heal stale deploys: if a lazily-imported chunk fails to load (the page
 // was opened before a redeploy and references now-deleted chunk hashes),
-// hard-reload once to fetch the current assets instead of showing an error.
-function reloadOnceForChunkError() {
-  if (sessionStorage.getItem('apc-chunk-reloaded')) return
+// hard-reload once to fetch the current assets.
+function hardReloadOnce(): boolean {
+  if (sessionStorage.getItem('apc-chunk-reloaded')) return false
   sessionStorage.setItem('apc-chunk-reloaded', '1')
   window.location.reload()
+  return true
 }
-window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); reloadOnceForChunkError() })
+window.addEventListener('vite:preloadError', (e) => {
+  // Only swallow (preventDefault) if we're actually going to reload. Calling
+  // preventDefault WITHOUT reloading makes the dynamic import resolve to
+  // undefined -> "Cannot read properties of undefined (reading 'default')",
+  // so when we've already retried this session, let the error surface normally.
+  if (sessionStorage.getItem('apc-chunk-reloaded')) return
+  e.preventDefault()
+  hardReloadOnce()
+})
 window.addEventListener('unhandledrejection', (e) => {
   const msg = String((e as PromiseRejectionEvent)?.reason?.message || (e as PromiseRejectionEvent)?.reason || '')
   if (/dynamically imported module|Importing a module script failed|error loading dynamically/i.test(msg)) {
-    reloadOnceForChunkError()
+    hardReloadOnce()
   }
 })
 
@@ -34,12 +43,17 @@ window.addEventListener('unhandledrejection', (e) => {
 ;(window as unknown as { __apcLibsession?: () => Promise<unknown> }).__apcLibsession =
   () => import('@/shared/api/groups-v2/libsession').then(m => m.getLibsession())
 
-// Register the PWA service worker (notifications + installability).
+// Register the PWA service worker (notifications + installability). Deferred to
+// idle so the large SW bundle doesn't compete with the initial app load on slow
+// connections.
 if ('serviceWorker' in navigator) {
+  const register = () => navigator.serviceWorker
+    .register(import.meta.env.BASE_URL + 'sw.js', { scope: import.meta.env.BASE_URL })
+    .catch(() => { /* ignore */ })
   window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register(import.meta.env.BASE_URL + 'sw.js', { scope: import.meta.env.BASE_URL })
-      .catch(() => { /* ignore */ })
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void }).requestIdleCallback
+    if (ric) ric(register, { timeout: 10000 })
+    else setTimeout(register, 4000)
   })
 }
 
