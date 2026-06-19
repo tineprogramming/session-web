@@ -1,6 +1,7 @@
 import React from 'react'
 import { indexedDB as fakeIndexedDB, IDBKeyRange as fakeIDBKeyRange } from 'fake-indexeddb'
 import Dexie from 'dexie'
+import { setLoadProgress } from '@/shared/load-progress'
 
 export const IndexedDbLoader = React.lazy(async () => {
   const indexedDbAvailable = await new Promise(resolve => {
@@ -17,6 +18,7 @@ export const IndexedDbLoader = React.lazy(async () => {
   } else {
     window.shimmedIndexedDb = false
   }
+  setLoadProgress(55)
 
   return {
     default: ({ children }: React.PropsWithChildren) => children

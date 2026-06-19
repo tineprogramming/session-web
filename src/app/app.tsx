@@ -24,6 +24,7 @@ import { t } from 'i18next'
 import { ensureNotificationPermission } from '@/shared/notifications'
 import { enableBackgroundSync, disableBackgroundSync } from '@/shared/background-sync'
 import { retryFailedMessages } from '@/shared/api/resend'
+import { setLoadProgress } from '@/shared/load-progress'
 
 export default function App() {
   const account = useAppSelector(selectAccount)
@@ -80,7 +81,8 @@ export default function App() {
   }, [account])
 
   React.useEffect(() => {
-    // App chunk loaded successfully — reset the stale-deploy reload guard.
+    // App mounted: loading is complete, and reset the stale-deploy reload guard.
+    setLoadProgress(100)
     sessionStorage.removeItem('apc-chunk-reloaded')
     if (window.shimmedIndexedDb) {
       toast.warning(t('indexedDbNotAvailable'))

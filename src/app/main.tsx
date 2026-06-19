@@ -11,7 +11,12 @@ import { SodiumLoader } from '@/app/sodium-loader'
 import { IndexedDbLoader } from '@/app/indexeddb-loader'
 import { I18nLoader } from '@/app/i18n-loader'
 
-const AppComponent = React.lazy(() => import('@/app/app.tsx'))
+import { setLoadProgress } from '@/shared/load-progress'
+
+setLoadProgress(10) // boot started (entry chunk downloaded + executing)
+
+const AppComponent = React.lazy(() =>
+  import('@/app/app.tsx').then(m => { setLoadProgress(88); return m }))
 
 // Self-heal stale deploys: if a lazily-imported chunk fails to load (the page
 // was opened before a redeploy and references now-deleted chunk hashes),

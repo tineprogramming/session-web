@@ -2,6 +2,7 @@ import React from 'react'
 import i18next from 'i18next'
 import Backend from 'i18next-http-backend'
 import { initReactI18next } from 'react-i18next'
+import { setLoadProgress } from '@/shared/load-progress'
 
 export const I18nLoader = React.lazy(async () => {
   await i18next
@@ -16,6 +17,7 @@ export const I18nLoader = React.lazy(async () => {
       },
       defaultNS: 'common'
     })
+  setLoadProgress(70)
 
   return {
     default: ({ children }: React.PropsWithChildren) => children
