@@ -72,7 +72,7 @@ export function ConversationPage() {
         <button
           onClick={() => navigate('/')}
           title="Back"
-          className="md:hidden text-neutral-300 hover:text-white shrink-0 -ml-1"
+          className="lg:hidden text-neutral-300 hover:text-white shrink-0 -ml-1"
         >
           <MdArrowBack className="w-5 h-5" />
         </button>
