@@ -134,6 +134,16 @@ export async function runPoll(opts: {
   const allData = messages.filter(msg => msg.content.dataMessage)
   for (const msg of allData) {
     if (msg.content.dataMessage?.groupUpdateMessage && !msg.to) {
+      const gum = msg.content.dataMessage.groupUpdateMessage
+      console.warn('[apc-debug] groupUpdateMessage received', {
+        from: msg.envelope.source,
+        invite: !!gum.inviteMessage,
+        groupId: gum.inviteMessage?.groupSessionId,
+        name: gum.inviteMessage?.name,
+      })
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('apc-group-debug', { detail: gum.inviteMessage?.name || 'group update' }))
+      }
       await handleGroupV2Update(msg, accountSessionID, isActive)
     }
   }

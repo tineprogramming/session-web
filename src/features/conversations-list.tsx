@@ -142,11 +142,8 @@ function ConversationItem({ selected, convo, isCollapsed }: {
         className={cx('max-w-full',
           buttonVariants({ variant: variant, size: 'sm' }),
           variant === 'default' &&
-          'lg:dark:bg-muted lg:dark:text-white lg:dark:hover:bg-muted lg:dark:hover:text-white',
-          '!justify-start gap-3 !text-base lg:!text-sm h-fit py-3 lg:py-2',
-          // Mobile (B design): each row is a rounded card; desktop stays flat.
-          'mx-2 my-1 rounded-2xl border bg-[#16161a] px-3 lg:mx-0 lg:my-0 lg:rounded-md lg:border-0 lg:bg-transparent lg:px-3',
-          variant === 'default' ? 'border-brand/50' : 'border-[#23232b]'
+          'dark:bg-muted dark:text-white dark:hover:bg-muted dark:hover:text-white',
+          '!justify-start gap-3 !text-base lg:!text-sm h-fit py-3 lg:py-2'
         )}
       >
         <Avatar className='w-[56px] h-[56px] lg:w-[48px] lg:h-[48px] shrink-0 text-neutral-400 font-semibold text-lg lg:text-base'>

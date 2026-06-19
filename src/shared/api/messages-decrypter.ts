@@ -28,7 +28,10 @@ export function extractWebSocketContent(
     const raw = new Uint8Array(StringUtils.encode(message, 'base64'))
     // Apocentro: reject anything that isn't wrapped with our magic bytes
     // (standard Session messages, noise) before attempting to decode.
-    if (!hasMagicBytes(raw)) return null
+    if (!hasMagicBytes(raw)) {
+      console.warn('[apc-debug] dropped message: no magic bytes', { messageHash, firstBytes: Array.from(raw.slice(0, 8)) })
+      return null
+    }
     const dataPlaintext = stripMagicBytes(raw)
     const messageBuf = SignalService.WebSocketMessage.decode(dataPlaintext)
     if (

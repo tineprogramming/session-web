@@ -2,12 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
-/* On phones / portrait tablets (single-column layout), scale the whole UI up so
-   rem-based text, spacing and controls are comfortably readable. Desktop keeps
-   the default 16px. */
+/* On phones / portrait tablets (single-column), scale the whole UI relative to
+   the viewport width. Devices that report a wide CSS viewport (foldables, some
+   tablets) would otherwise render everything tiny; clamp keeps it readable on
+   normal phones too. Desktop keeps the default 16px. */
 @media (max-width: 1023px) {
   html {
-    font-size: 20px;
+    font-size: clamp(19px, 3.6vw, 34px);
   }
 }
 

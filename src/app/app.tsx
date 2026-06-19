@@ -82,6 +82,16 @@ export default function App() {
     return () => window.removeEventListener('online', onOnline)
   }, [account])
 
+  // TEMP debug: surface group-v2 invites arriving on the web.
+  React.useEffect(() => {
+    const onGroupDebug = (e: Event) => {
+      const name = (e as CustomEvent).detail
+      toast.success('Group invite received: ' + name)
+    }
+    window.addEventListener('apc-group-debug', onGroupDebug)
+    return () => window.removeEventListener('apc-group-debug', onGroupDebug)
+  }, [])
+
   React.useEffect(() => {
     // App mounted: loading is complete, and reset the stale-deploy reload guard.
     setLoadProgress(100)
