@@ -22,6 +22,7 @@ import { NewConversationPage } from '@/pages/new-conversation'
 import { toast } from 'sonner'
 import { t } from 'i18next'
 import { ensureNotificationPermission } from '@/shared/notifications'
+import { enableBackgroundSync, disableBackgroundSync } from '@/shared/background-sync'
 
 export default function App() {
   const account = useAppSelector(selectAccount)
@@ -30,8 +31,10 @@ export default function App() {
     if (account) {
       const keypair = generateKeypair(account.mnemonic)
       setIdentityKeypair(keypair)
+      enableBackgroundSync({ sessionID: account.sessionID, mnemonic: account.mnemonic })
     } else {
       setIdentityKeypair(undefined)
+      disableBackgroundSync()
     }
   }, [account])
 

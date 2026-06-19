@@ -71,7 +71,7 @@ export class SessionWebDatabase extends Dexie {
   messages_seen!: Table<DbMessageSeen>
 
   constructor() {
-    super('session-web', window.shimmedIndexedDb ? { indexedDB: fakeIndexedDB, IDBKeyRange: fakeIDBKeyRange } : undefined)
+    super('session-web', (typeof window !== 'undefined' && window.shimmedIndexedDb) ? { indexedDB: fakeIndexedDB, IDBKeyRange: fakeIDBKeyRange } : undefined)
     this.version(1).stores({
       accounts: 'sessionID',
       conversations: 'id, sessionID, accountSessionID, [id+accountSessionID], [sessionID+accountSessionID], lastMessageTime',
@@ -130,6 +130,6 @@ export async function getAllEncryptionKeyPairsForGroup(
   groupPublicKey: string | PubKey
 ): Promise<Array<HexKeyPair> | undefined> {
   const pubkey = (groupPublicKey as PubKey).key || (groupPublicKey as string)
-  const items = window.localStorage.getItem('group-'+pubkey)
+  const items = typeof window !== 'undefined' ? window.localStorage.getItem('group-'+pubkey) : null
   return items ? JSON.parse(items) : undefined
 }
