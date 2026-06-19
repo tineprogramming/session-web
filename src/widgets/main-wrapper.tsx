@@ -1,20 +1,32 @@
 import { LeftPanel, SidebarContent } from '@/widgets/left-panel'
 import { ResizablePanel } from '@/shared/ui/resizable'
 import { PageWrapper } from '@/widgets/page-wrapper'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useIsMobile } from '@/shared/hooks/use-is-mobile'
+import { SquarePenIcon } from 'lucide-react'
 
 export function MainWrapper() {
   const isMobile = useIsMobile()
   const location = useLocation()
+  const navigate = useNavigate()
 
   // On phones use a single column: the conversation list is the home screen,
   // and opening a conversation replaces it full-screen (back button returns).
+  // The primary action (compose) lives in a thumb-reachable FAB.
   if (isMobile) {
     const inConversation = location.pathname.startsWith('/conversation')
     return (
-      <div className='flex h-full w-full flex-col overflow-hidden'>
+      <div className='relative flex h-full w-full flex-col overflow-hidden'>
         {inConversation ? <Outlet /> : <SidebarContent />}
+        {!inConversation && (
+          <button
+            onClick={() => navigate('/conversation/new')}
+            title='New conversation'
+            className='absolute bottom-6 right-5 z-20 w-16 h-16 rounded-full bg-brand text-black shadow-xl shadow-black/40 flex items-center justify-center active:scale-95 transition-transform'
+          >
+            <SquarePenIcon size={26} />
+          </button>
+        )}
       </div>
     )
   }

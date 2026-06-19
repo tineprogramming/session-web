@@ -22,7 +22,7 @@ export function SidebarContent({ isCollapsed = false }: { isCollapsed?: boolean 
       >
         <AccountSwitcher isCollapsed={isCollapsed} />
         {!isCollapsed && (
-          <CreateConversationButton className='shrink-0' />
+          <CreateConversationButton className='shrink-0 hidden lg:inline-flex' />
         )}
       </div>
       <Separator />
