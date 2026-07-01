@@ -1,5 +1,6 @@
 import bunrest from 'bunrest'
 import cors from 'cors'
+import { join } from 'path'
 import { Snode, fetchSnodesList, pollSnode } from './snodes'
 import { GetNetworkTime } from './network-time'
 import { z } from 'zod'
@@ -9,10 +10,15 @@ import { getSwarms } from './swarms'
 import { sendMessageDataToSnode } from './store-message'
 import { RetryWithOtherNode421Error } from './utils/errors'
 
+// Keep the proxy alive: a single unhandled rejection (e.g. a transient snode
+// fetch failure in a background task) must never take down the whole server.
+process.on('uncaughtException', (e) => console.error('[proxy] uncaughtException', e))
+process.on('unhandledRejection', (e) => console.error('[proxy] unhandledRejection', e))
+
 const server = bunrest()
 
 server.use(cors({
-  origin: [/^https?:\/\/localhost/, 'https://session-web.pages.dev']
+  origin: [/^https?:\/\/localhost/, 'https://apocentro.pages.dev', 'https://session-web.pages.dev']
 }))
 
 export const nodes: Map<string, Snode> = new Map()
@@ -26,9 +32,15 @@ await fetchSnodes()
 setInterval(fetchSnodes, 1000 * 60 * 5)
 
 server.get('/snodes', async (req, res) => {
+  // Return full node descriptors (incl. pubkeys) so the client can build onions.
   res.status(200).json({
     ok: true,
-    snodes: Array.from(nodes.values()).map(node => node.public_ip + ':' + node.storage_port)
+    snodes: Array.from(nodes.values()).map(node => ({
+      ip: node.public_ip,
+      port: node.storage_port,
+      x25519: node.pubkey_x25519,
+      ed25519: node.pubkey_ed25519,
+    }))
   })
 })
 
@@ -250,12 +262,280 @@ server.get('/ons', async (req, res) => {
   }
 })
 
+// Apocentro onion path display (spec §3.9) — returns the 3 relay hops the
+// onion request traverses, annotated with GeoIP country via ip-api.com.
+server.get('/path', async (req, res) => {
+  const all = Array.from(nodes.values())
+  if (all.length < 3) {
+    res.status(503).json({ ok: false, error: 'Not enough nodes available' })
+    return
+  }
+  const picked: Snode[] = []
+  const labels = ['Guard', 'Middle', 'Swarm']
+  while (picked.length < 3) {
+    const candidate = _.sample(all)!
+    if (!picked.some(p => p.public_ip === candidate.public_ip)) picked.push(candidate)
+  }
+
+  let geo: Record<string, { country?: string, countryCode?: string }> = {}
+  try {
+    const lookup = await fetch('http://ip-api.com/batch?fields=country,countryCode,query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(picked.map(p => ({ query: p.public_ip }))),
+    })
+    if (lookup.ok) {
+      const arr = await lookup.json() as Array<{ query: string, country?: string, countryCode?: string }>
+      for (const entry of arr) geo[entry.query] = { country: entry.country, countryCode: entry.countryCode }
+    }
+  } catch { /* GeoIP is best-effort */ }
+
+  res.status(200).json({
+    ok: true,
+    path: picked.map((node, i) => ({
+      label: labels[i],
+      ip: node.public_ip,
+      port: node.storage_port,
+      country: geo[node.public_ip]?.country ?? null,
+      countryCode: geo[node.public_ip]?.countryCode ?? null,
+    })),
+  })
+})
+
+server.options('/path', (req, res) => { res.status(200).send(true) })
+
+// GeoIP for a set of IPs plus the requesting client's own IP+flag (spec §3.9).
+// Used by the live onion-path display, which knows the real hops client-side.
+// Cache GeoIP results so we don't hit ip-api's rate limit (which would drop the
+// country flags). IPs rarely change country, so a long-lived cache is fine.
+const geoipCache: Map<string, { country: string | null, countryCode: string | null }> = new Map()
+
+async function geoipBatch(ips: string[]): Promise<Record<string, { country: string | null, countryCode: string | null }>> {
+  const out: Record<string, { country: string | null, countryCode: string | null }> = {}
+  const unique = Array.from(new Set(ips.filter(Boolean)))
+  const missing: string[] = []
+  for (const ip of unique) {
+    const cached = geoipCache.get(ip)
+    if (cached) out[ip] = cached
+    else missing.push(ip)
+  }
+  if (missing.length === 0) return out
+  try {
+    const r = await fetch('http://ip-api.com/batch?fields=country,countryCode,query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(missing.map(q => ({ query: q }))),
+    })
+    if (r.ok) {
+      const arr = await r.json() as Array<{ query: string, country?: string, countryCode?: string }>
+      for (const e of arr) {
+        const entry = { country: e.country ?? null, countryCode: e.countryCode ?? null }
+        out[e.query] = entry
+        if (entry.countryCode) geoipCache.set(e.query, entry)
+      }
+    }
+  } catch { /* best-effort */ }
+  return out
+}
+
+server.post('/geoip', async (req, res) => {
+  const body = await z.object({ ips: z.array(z.string()).max(10).optional() }).safeParseAsync(req.body)
+  const ips = body.success ? (body.data.ips ?? []) : []
+  // Client IP from the proxy chain (nginx -> front -> bunrest).
+  const fwd = (req.headers['x-forwarded-for'] as string | undefined) ?? (req.headers['x-real-ip'] as string | undefined) ?? ''
+  const clientIp = fwd.split(',')[0]?.trim() || null
+  const geo = await geoipBatch([...ips, ...(clientIp ? [clientIp] : [])])
+  res.status(200).json({
+    ok: true,
+    client: clientIp ? { ip: clientIp, ...(geo[clientIp] ?? { country: null, countryCode: null }) } : null,
+    geo,
+  })
+})
+
+server.options('/geoip', (req, res) => { res.status(200).send(true) })
+
+const FILE_SERVER = 'https://filev2.getsession.org'
+
+// Apocentro file attachments — blind proxy to the Session file server.
+// The client uploads/downloads only AES-256-GCM encrypted bytes; the proxy
+// never sees plaintext file content. See spec §4.
+server.post('/upload', async (req, res) => {
+  const body = await z.object({
+    // base64-encoded, already client-side encrypted attachment bytes
+    data: z.string().min(1).max(20_000_000),
+  }).safeParseAsync(req.body)
+  if (!body.success) {
+    res.status(400).json({ ok: false, error: 'Invalid request body' })
+    return
+  }
+  try {
+    const bytes = Buffer.from(body.data.data, 'base64')
+    const upload = await fetch(FILE_SERVER + '/file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: bytes,
+    })
+    if (upload.status !== 200 && upload.status !== 201) {
+      res.status(502).json({ ok: false, error: 'File server rejected upload' })
+      return
+    }
+    const json = await upload.json() as { id: string | number }
+    const id = String(json.id)
+    res.status(200).json({ ok: true, id, url: FILE_SERVER + '/file/' + id })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Internal server error' })
+  }
+})
+
+server.get('/download', async (req, res) => {
+  // Accept either an explicit file `id` or a `url` (any file-server URL — we
+  // only use its trailing id). This handles attachments from the mobile app,
+  // which may send only the id.
+  const query = await z.object({
+    url: z.string().optional(),
+    id: z.string().optional(),
+  }).safeParseAsync(req.query)
+  if (!query.success) {
+    res.status(400).json({ ok: false, error: 'Invalid request query' })
+    return
+  }
+  const id = (query.data.id && /^\d+$/.test(query.data.id))
+    ? query.data.id
+    : (query.data.url?.split(/[/?#]/).filter(Boolean).pop() ?? '')
+  if (!/^\d+$/.test(id)) {
+    res.status(400).json({ ok: false, error: 'Missing or invalid file id' })
+    return
+  }
+  try {
+    const download = await fetch(FILE_SERVER + '/files/' + id)
+    if (download.status !== 200) {
+      res.status(502).json({ ok: false, error: 'File server error' })
+      return
+    }
+    const json = await download.json() as { status_code?: number, result?: string }
+    if (json.result) {
+      res.status(200).json({ ok: true, data: json.result })
+    } else {
+      // some deployments return raw bytes instead of the {result} envelope
+      const buf = Buffer.from(await download.arrayBuffer())
+      res.status(200).json({ ok: true, data: buf.toString('base64') })
+    }
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Internal server error' })
+  }
+})
+
+// Apocentro client-side onion routing: blind first-hop forwarder.
+// The client builds the entire 3-layer onion and sends the opaque outer bytes
+// here; we forward them to the guard node's /onion_req/v2 and relay the reply.
+// We never see the message content or final destination (spec §3.6).
+server.post('/forward', async (req, res) => {
+  const body = await z.object({
+    guard: z.object({
+      ip: z.string().regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/),
+      port: z.number().int().positive(),
+    }),
+    payload: z.string().min(1), // base64 of the binary onion body
+  }).safeParseAsync(req.body)
+  if (!body.success) {
+    res.status(400).json({ ok: false, error: 'Invalid request body' })
+    return
+  }
+  try {
+    const bytes = Buffer.from(body.data.payload, 'base64')
+    const r = await fetch(`https://${body.data.guard.ip}:${body.data.guard.port}/onion_req/v2`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: bytes,
+      tls: { rejectUnauthorized: false },
+    })
+    const buf = Buffer.from(await r.arrayBuffer())
+    res.status(200).json({ ok: true, status: r.status, data: buf.toString('base64') })
+  } catch (e) {
+    res.status(502).json({ ok: false, error: 'Guard node unreachable' })
+  }
+})
+
+server.options('/forward', (req, res) => { res.status(200).send(true) })
+server.options('/upload', (req, res) => { res.status(200).send(true) })
+server.options('/download', (req, res) => { res.status(200).send(true) })
 server.options('/snodes', (req, res) => { res.status(200).send(true) })
 server.options('/network_time', (req, res) => { res.status(200).send(true) })
 server.options('/swarms', (req, res) => { res.status(200).send(true) })
 server.options('/poll', (req, res) => { res.status(200).send(true) })
 server.options('/store', (req, res) => { res.status(200).send(true) })
 
-server.listen(process.env.PORT || 3000, () => {
-  console.log('App is listening on port ' + process.env.PORT || 3000)
+// Apocentro: serve the built frontend AND the API from a single public port.
+// bunrest handles the JSON API on an internal loopback port; a thin front
+// server (below) serves the static frontend with the required cross-origin
+// isolation headers and forwards API calls to bunrest.
+const PUBLIC_PORT = Number(process.env.PORT || 3000)
+const INTERNAL_PORT = PUBLIC_PORT + 1
+const FRONTEND_DIST = process.env.FRONTEND_DIST || join(import.meta.dir, '..', '..', 'dist')
+const COI_HEADERS = {
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+}
+const API_PATHS = new Set([
+  '/snodes', '/network_time', '/swarms', '/poll', '/store',
+  '/ons', '/path', '/upload', '/download', '/forward', '/geoip',
+])
+
+server.listen(INTERNAL_PORT, () => {
+  console.log('Apocentro API (internal) listening on port ' + INTERNAL_PORT)
 })
+
+Bun.serve({
+  port: PUBLIC_PORT,
+  async fetch(req: Request) {
+    const url = new URL(req.url)
+    const path = url.pathname
+
+    // API requests -> bunrest on the internal port. Only forward the
+    // content-type (forwarding host/content-length/encoding headers breaks the
+    // internal fetch); let Bun set content-length from the body.
+    if (API_PATHS.has(path)) {
+      try {
+        const headers: Record<string, string> = {}
+        const ct = req.headers.get('content-type')
+        if (ct) headers['content-type'] = ct
+        // Pass the client IP through so /geoip can report it.
+        const xff = req.headers.get('x-forwarded-for')
+        if (xff) headers['x-forwarded-for'] = xff
+        const xri = req.headers.get('x-real-ip')
+        if (xri) headers['x-real-ip'] = xri
+        const init: RequestInit = { method: req.method, headers }
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          init.body = await req.arrayBuffer()
+        }
+        return await fetch('http://127.0.0.1:' + INTERNAL_PORT + path + url.search, init)
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ ok: false, error: 'internal forward failed: ' + ((e as Error)?.message ?? e) }),
+          { status: 500, headers: { 'content-type': 'application/json' } },
+        )
+      }
+    }
+
+    // Everything else -> static frontend (SPA) with cross-origin isolation.
+    const rel = path === '/' ? '/index.html' : path
+    let file = Bun.file(FRONTEND_DIST + rel)
+    let isFallback = false
+    if (!(await file.exists())) {
+      file = Bun.file(FRONTEND_DIST + '/index.html') // SPA fallback
+      isFallback = true
+    }
+    // Content-hashed assets can be cached forever; HTML/sw.js must always
+    // revalidate so a redeploy's new chunk hashes take effect immediately
+    // (otherwise a stale index.html references deleted chunks -> blank page).
+    const cacheable = !isFallback && path.startsWith('/assets/')
+    const headers: Record<string, string> = {
+      ...COI_HEADERS,
+      'Cache-Control': cacheable
+        ? 'public, max-age=31536000, immutable'
+        : 'no-cache, must-revalidate',
+    }
+    return new Response(file, { headers })
+  },
+})
+console.log('Apocentro (frontend + API) listening on port ' + PUBLIC_PORT)

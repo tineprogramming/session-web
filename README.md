@@ -1,59 +1,89 @@
-# [Session Web](https://session-web.pages.dev)
+# Apocentro Web
 
-> [!NOTE]
-> The project is archived and I no longer contribute to Session. You might want to check out [this fork](https://github.com/gongchandang49/session-web) by gongchandang49
+A private, end‑to‑end encrypted messenger that runs **entirely in your browser** —
+a white‑label fork of [Session](https://getsession.org) (based on
+[`session-web`](https://github.com/VityaSchel/session-web) by hloth).
 
-Experimental project running [Session messenger](https://getsession.org) in browser.
+Apocentro is a **closed ecosystem**: after Session's E2E encryption, every
+message is wrapped with magic bytes (`0x41 0x50 0x43 0x01` = `"APC"` + version)
+so only other Apocentro clients (this web app and the Apocentro Android app) can
+read it — and Apocentro messages are unreadable to standard Session clients.
 
-![Screenshot](https://github.com/VityaSchel/session-web/assets/59040542/3d8a1744-efa5-4cbc-8c60-5d06dfcc77c3)
+There are no accounts, phone numbers, or central servers — just a mnemonic and
+the decentralized Session network, reached through a real client‑side 3‑hop
+onion route. Private keys and decrypted messages never leave the browser.
 
-Visit Session Web: [session-web.pages.dev](https://session-web.pages.dev)
+**Live:** https://tinecarlogpt.tinestuff.com/apocentro/
 
-Works in Tor! 99% client-side (still requires proxy to swarms though). All encryption and private keys never leave browser.
+## Features
 
-**This is rather a technical challenge for me, rather than a stable client**
+- 🔒 End‑to‑end encryption + client‑side **3‑hop onion routing** (the proxy is a
+  blind relay; it never sees recipients or plaintext).
+- 💬 Direct messages with **images, files, and voice notes** (hold the mic to
+  record, release to send, slide left to cancel).
+- 👥 **Groups** (web ⇄ web): create, message, add / remove / leave members, with
+  system notices.
+- 🔔 **Notifications** (PWA) — in‑page when the tab is hidden and, when installed
+  to the home screen, in the background via Periodic Background Sync (no push
+  server).
+- 🌐 **Onion path** view — your IP plus each hop with country/flag.
+- ↻ Failed messages retry on tap and auto‑retry when the network returns.
+- 📱 Responsive, one‑handed mobile layout; installable as a PWA.
+- 🧩 App ⇄ web interoperability for DMs and attachments (real Session protocol).
 
-> [!IMPORTANT]
-> I'm looking for a job! Interested in hiring me? Visit [cv.hloth.dev](https://cv.hloth.dev) to review my resume & CV.
+## Tech
 
-- [X] Receiving messages
-- [X] Sending messages
-  - [ ] Attachments support
-- [ ] Clearing network
-- [ ] Conversations pinning
-- [ ] Closed groups
-- [ ] Open groups (communities)
-- [ ] Blocked list
-- [ ] Profile editing
-- [ ] Searching conversations
-- [ ] Searching in conversations
-- [ ] Optimizations
-  - [ ] Partial conversations loading
-- [X] Multiaccount
-- [X] Localization
-  - [X] English
-  - [X] Russian
-  - [ ] Option to change UI language
-- [ ] PWA
-  - [ ] Offline support
-  - [ ] Updates
-- [ ] Push notifications
-  - [ ] Notifications settings
-- [ ] Calls
-- [ ] Custom proxy server support
-- [ ] Direct nodes connection support
-  - [ ] Onion routing
+React + Vite + TypeScript · Redux Toolkit (+ redux‑persist) · Dexie (IndexedDB) ·
+libsodium‑wrappers‑sumo (wasm) · protobufjs · a small **Bun** proxy that serves
+the frontend and blindly forwards onion requests on a single port.
 
-## How it works?
+A proxy is required only because Session nodes use self‑signed TLS and send no
+CORS headers — it relays the (already onion‑encrypted) bytes and never sees
+destinations or content.
 
-All your confidential data (private keys, decrypted messages etc) never left your device. We need a proxy server though for 2 reasons:
-1. Every node has its own self-signed SSL certificate and browsers reject connection to these, unless they are added to system level
-2. Nodes do not send CORS headers, which prevent reading responses
+See [`CLAUDE.md`](./CLAUDE.md) for the full architecture and developer notes, and
+`Apocentro-Android/Web_Version_Tech_Spec/07_Apocentro_Technical_Specification.md`
+for the protocol spec.
 
-Proxy server is only used to route your encrypted JSON_RPC requests to chosen node.
+## Develop
 
-Source code of proxy server is at [proxy](./proxy) directory and is written in Bun.
+```bash
+bun install
+bun run dev          # local dev (sets the COOP/COEP headers the wasm needs)
 
-Be aware that I didn't care about best practices when writing this code, it does not use any security measures implemented in official clients, it does not prevent you from any kind of malicious attack, for example MITM. Backend requests to nodes aren't onion routed. SSL certificate pinning is not implemented (bun does not support this yet). This client does not support any cool features and is not maintained for security vulnerabilities found in code or dependencies.
+# production build for a sub-path deploy:
+VITE_BASE=/apocentro/ VITE_BACKEND_URL=/apocentro bun run build
+bun run preview
+```
 
-Runs on Vite. Backend is mostly written from scratch using parts of code from [Session Desktop client](https://github.com/oxen-io/session-desktop)
+`bun run build` runs the protobuf codegen, builds the app, and bundles the
+service worker separately into `dist/sw.js`.
+
+## Deploy
+
+The frontend **and** the API are served by one Bun process under a URL sub‑path
+(default `/apocentro`), fronted by your existing nginx.
+
+A push whose commit message contains **`[deploy-server]`** triggers
+`.github/workflows/deploy-server.yml`: GitHub's runner SSHes to the server, does
+a fresh clone, and runs `deploy/apocentro-deploy-subpath.sh` (build → systemd
+service → nginx snippet with gzip → reload).
+
+Set these repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Example |
+| --- | --- |
+| `SERVER_HOST` | `your-domain.com` |
+| `SERVER_PORT` | `22` |
+| `SERVER_USER` | `root` |
+| `SERVER_PASSWORD` | your SSH password |
+
+The workflow is repo‑portable: moving to your own (non‑fork) repository only
+requires re‑adding these four secrets — no code change.
+
+## Credits
+
+Built on Session (Oxen / Session Technology Foundation) and the open‑source
+`session-web` browser client by [hloth.dev](https://github.com/VityaSchel/session-web).
+Apocentro branding, magic bytes, and the closed‑ecosystem changes are this
+fork's own.

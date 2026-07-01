@@ -8,35 +8,37 @@ import { Separator } from '@/shared/ui/separator'
 import { AccountSwitcher } from '@/features/account-switcher'
 import { ConversationsList } from '@/features/conversations-list'
 import { CreateConversationButton } from '@/entities/create-conversation-button'
+import { PathDisplay } from '@/widgets/path-display'
+
+/** The sidebar's inner content, reused full-width on mobile (no resizable). */
+export function SidebarContent({ isCollapsed = false }: { isCollapsed?: boolean }) {
+  return (
+    <>
+      <div
+        className={cx(
+          'flex h-[56px] items-center justify-center shrink-0 gap-1 px-2',
+          isCollapsed ? 'h-[52px]' : ''
+        )}
+      >
+        <AccountSwitcher isCollapsed={isCollapsed} />
+        {!isCollapsed && (
+          <CreateConversationButton className='shrink-0 hidden lg:inline-flex' />
+        )}
+      </div>
+      <Separator />
+      <ConversationsList isCollapsed={isCollapsed} />
+      {!isCollapsed && (
+        <>
+          <Separator />
+          <PathDisplay />
+        </>
+      )}
+    </>
+  )
+}
 
 export function LeftPanel() {
   const [isCollapsed, setIsCollapsed] = React.useState(false)
-  // const [collapsedSize, setCollapsedSize] = React.useState()
-  // const panelRef = React.useRef<HTMLDivElement>(null)
-  
-  // React.useLayoutEffect(() => {
-  //   const panelGroup = document.querySelector('[data-panel-group-id="group"]')
-  //   const resizeHandles = document.querySelectorAll(
-  //     '[data-panel-resize-handle-id]'
-  //   )
-  //   const observer = new ResizeObserver(() => {
-  //     let width = panelGroup.offsetWidth
-
-  //     resizeHandles.forEach((resizeHandle) => {
-  //       width -= resizeHandle.offsetHeight
-  //     })
-
-  //     setCollapsedSize((MIN_SIZE_IN_PIXELS / width) * 100)
-  //   })
-  //   observer.observe(panelGroup as Element)
-  //   resizeHandles.forEach((resizeHandle) => {
-  //     observer.observe(resizeHandle)
-  //   })
-
-  //   return () => {
-  //     observer.disconnect()
-  //   }
-  // }, [])
 
   return (
     <>
@@ -53,22 +55,7 @@ export function LeftPanel() {
           'min-w-[200px]': !isCollapsed,
         })}
       >
-        <div
-          className={cx(
-            'flex h-[56px] items-center justify-center shrink-0 gap-1 px-2',
-            isCollapsed ? 'h-[52px]' : ''
-          )}
-        >
-          <AccountSwitcher isCollapsed={isCollapsed} />
-          {!isCollapsed && (
-            <CreateConversationButton className='shrink-0' />
-          )}
-        </div>
-        <Separator />
-        <ConversationsList isCollapsed={isCollapsed} />
-        {/** todo: pinned */}
-        {/* <Separator />
-        <ConversationsList isCollapsed={isCollapsed} /> */}
+        <SidebarContent isCollapsed={isCollapsed} />
       </ResizablePanel>
       <ResizableHandle withHandle />
     </>

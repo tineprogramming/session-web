@@ -1,0 +1,8 @@
+# Apocentro requires cross-origin isolation (SharedArrayBuffer / wasm crypto):
+# without these headers, account creation and encryption fail (the app bounces
+# back to /login). Hosts that support a _headers file — Cloudflare Pages,
+# Netlify — will serve these. GitHub Pages CANNOT set custom headers, so it
+# does NOT work for Apocentro.
+/*
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Opener-Policy: same-origin

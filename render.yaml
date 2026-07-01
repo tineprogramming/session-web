@@ -1,0 +1,15 @@
+# Render blueprint for the Apocentro proxy (the backend the web app talks to).
+# Deploy: push this repo to GitHub, then in Render: New > Blueprint > pick this repo.
+# Render builds the proxy container from proxy/Dockerfile and gives you an HTTPS URL.
+# Put that URL into the frontend's VITE_BACKEND_URL before building the web app.
+services:
+  - type: web
+    name: apocentro-proxy
+    runtime: docker
+    dockerfilePath: ./proxy/Dockerfile
+    dockerContext: ./proxy
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 3000

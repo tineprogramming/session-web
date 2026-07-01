@@ -143,22 +143,22 @@ function ConversationItem({ selected, convo, isCollapsed }: {
           buttonVariants({ variant: variant, size: 'sm' }),
           variant === 'default' &&
           'dark:bg-muted dark:text-white dark:hover:bg-muted dark:hover:text-white',
-          '!justify-start gap-3 !text-sm h-fit py-2'
+          '!justify-start gap-3 !text-base lg:!text-sm h-fit py-3 lg:py-2'
         )}
       >
-        <Avatar className='w-[48px] h-[48px] text-neutral-400 font-semibold text-base'>
+        <Avatar className='w-[56px] h-[56px] lg:w-[48px] lg:h-[48px] shrink-0 text-neutral-400 font-semibold text-lg lg:text-base'>
           {displayImage && <AvatarImage src={displayImage} alt={convo.displayName || convo.sessionID} />}
           <AvatarFallback>{trimmedDisplayName.toUpperCase()}</AvatarFallback>
         </Avatar>
-        <div className='flex flex-col gap-1 flex-1 min-w-0'>
-          <span className='font-medium text-ellipsis overflow-hidden'>{convo.displayName || convo.sessionID}</span>
-          {convo.lastMessage && (<span className='font-normal'>
+        <div className='flex flex-col gap-0.5 flex-1 min-w-0'>
+          <span className='text-lg lg:text-base font-semibold text-ellipsis overflow-hidden'>{convo.displayName || convo.sessionID}</span>
+          {convo.lastMessage && (<span className='font-normal text-sm text-muted-foreground text-ellipsis overflow-hidden'>
             <ConversationPreviewMessage message={convo.lastMessage} />
           </span>)}
         </div>
         {newMessages !== undefined && newMessages > 0 && (
           <span
-            className={cx('bg-brand rounded-full w-4 h-4 flex items-center justify-center text-xs !text-black',
+            className={cx('bg-brand rounded-full w-5 h-5 lg:w-4 lg:h-4 flex items-center justify-center text-xs !text-black shrink-0',
               'ml-auto'
             )}
           >

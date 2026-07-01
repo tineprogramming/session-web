@@ -2,6 +2,7 @@ import React from 'react'
 import i18next from 'i18next'
 import Backend from 'i18next-http-backend'
 import { initReactI18next } from 'react-i18next'
+import { setLoadProgress } from '@/shared/load-progress'
 
 export const I18nLoader = React.lazy(async () => {
   await i18next
@@ -11,10 +12,12 @@ export const I18nLoader = React.lazy(async () => {
       lng: navigator.language || 'en',
       fallbackLng: 'en',
       backend: {
-        loadPath: '/locales/{{lng}}/{{ns}}.json',
+        // Respect the configured base path so locales resolve under a sub-path deploy.
+        loadPath: import.meta.env.BASE_URL + 'locales/{{lng}}/{{ns}}.json',
       },
       defaultNS: 'common'
     })
+  setLoadProgress(70)
 
   return {
     default: ({ children }: React.PropsWithChildren) => children

@@ -19,8 +19,14 @@ import { poll } from '@/shared/poll'
 import { MainWrapper } from '@/widgets/main-wrapper'
 import { resetTargetNode, resetTargetSwarm } from '@/shared/nodes'
 import { NewConversationPage } from '@/pages/new-conversation'
+import { NetworkPage } from '@/pages/network'
+import { SettingsPage } from '@/pages/settings'
 import { toast } from 'sonner'
 import { t } from 'i18next'
+import { ensureNotificationPermission } from '@/shared/notifications'
+import { enableBackgroundSync, disableBackgroundSync } from '@/shared/background-sync'
+import { retryFailedMessages } from '@/shared/api/resend'
+import { setLoadProgress } from '@/shared/load-progress'
 
 export default function App() {
   const account = useAppSelector(selectAccount)
@@ -29,8 +35,28 @@ export default function App() {
     if (account) {
       const keypair = generateKeypair(account.mnemonic)
       setIdentityKeypair(keypair)
+      enableBackgroundSync({ sessionID: account.sessionID, mnemonic: account.mnemonic })
     } else {
       setIdentityKeypair(undefined)
+      disableBackgroundSync()
+    }
+  }, [account])
+
+  // Mobile browsers reject Notification.requestPermission() unless it is called
+  // from a real user gesture, so ask on the first tap/click after sign-in.
+  React.useEffect(() => {
+    if (!account) return
+    if (typeof Notification === 'undefined' || Notification.permission !== 'default') return
+    const ask = () => {
+      ensureNotificationPermission()
+      window.removeEventListener('pointerdown', ask)
+      window.removeEventListener('keydown', ask)
+    }
+    window.addEventListener('pointerdown', ask)
+    window.addEventListener('keydown', ask)
+    return () => {
+      window.removeEventListener('pointerdown', ask)
+      window.removeEventListener('keydown', ask)
     }
   }, [account])
 
@@ -48,7 +74,28 @@ export default function App() {
     }
   }, [account])
 
+  // Auto-retry failed outgoing messages when the network comes back.
   React.useEffect(() => {
+    if (!account) return
+    const onOnline = () => { retryFailedMessages(account.sessionID) }
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [account])
+
+  // TEMP debug: surface group-v2 invites arriving on the web.
+  React.useEffect(() => {
+    const onGroupDebug = (e: Event) => {
+      const name = (e as CustomEvent).detail
+      toast.success('Group invite received: ' + name)
+    }
+    window.addEventListener('apc-group-debug', onGroupDebug)
+    return () => window.removeEventListener('apc-group-debug', onGroupDebug)
+  }, [])
+
+  React.useEffect(() => {
+    // App mounted: loading is complete, and reset the stale-deploy reload guard.
+    setLoadProgress(100)
+    sessionStorage.removeItem('apc-chunk-reloaded')
     if (window.shimmedIndexedDb) {
       toast.warning(t('indexedDbNotAvailable'))
     }
@@ -56,10 +103,12 @@ export default function App() {
 
   return (
     <div>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
         <Routes>
           <Route path='/' element={<ProtectedRoute><MainWrapper /></ProtectedRoute>}>
             <Route path='/' element={<HomePage />} />
+            <Route path='/network' element={<NetworkPage />} />
+            <Route path='/settings' element={<SettingsPage />} />
             <Route path='/conversation/new' element={<NewConversationPage />} />
             <Route path='/conversation/:id' element={<ConversationPage />} />
           </Route>

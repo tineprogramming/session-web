@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "bun src/index.ts",
-    "postinstall": "bunx patch-package"
+    "postinstall": "node scripts/fix-bunrest.mjs; bunx patch-package || true"
   },
   "keywords": [],
   "author": "Viktor Shchelochkov <hi@hloth.dev> (https://hloth.dev)",

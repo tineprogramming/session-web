@@ -24,7 +24,19 @@ export type DbConversation = {
     textContent: string | null
   } | null
   lastMessageTime: number
+  /** Set when you left the group or were removed: read-only, composer hidden. Not indexed. */
+  left?: boolean
+  /** Present for real Session groups v2 (03-prefixed): member auth for the group swarm. Not indexed. */
+  groupV2?: { authData: string, invitedBy?: string }
 } & Conversation
+
+export type DbAttachment = {
+  contentType: string
+  fileName?: string
+  size?: number
+  /** Decrypted content, stored locally for display. */
+  blob: Blob
+}
 
 export type DbMessage = {
   direction: 'incoming' | 'outgoing'
@@ -35,8 +47,14 @@ export type DbMessage = {
   conversationID: string
   read: BooleanAsNumber
   textContent: string | null
+  /** Decrypted attachments (images / files), if any. Not indexed. */
+  attachments?: DbAttachment[]
   timestamp: number
   sendingStatus: 'sending' | 'error' | 'sent'
+  /** For group messages: the Session ID of the sender. Not indexed, undefined for DMs. */
+  senderID?: string
+  /** Centered "X added", "Y left" notices rather than a chat bubble. Not indexed. */
+  system?: boolean
 }
 
 export type DbUser = {
@@ -59,7 +77,7 @@ export class SessionWebDatabase extends Dexie {
   messages_seen!: Table<DbMessageSeen>
 
   constructor() {
-    super('session-web', window.shimmedIndexedDb ? { indexedDB: fakeIndexedDB, IDBKeyRange: fakeIDBKeyRange } : undefined)
+    super('session-web', (typeof window !== 'undefined' && window.shimmedIndexedDb) ? { indexedDB: fakeIndexedDB, IDBKeyRange: fakeIDBKeyRange } : undefined)
     this.version(1).stores({
       accounts: 'sessionID',
       conversations: 'id, sessionID, accountSessionID, [id+accountSessionID], [sessionID+accountSessionID], lastMessageTime',
@@ -99,14 +117,11 @@ export async function isMessageSeen(hash: string) {
 export async function setMessageSeen(hash: string) {
   const keypair = getIdentityKeyPair()
   if (!keypair) throw new Error('No identity keypair found')
-  console.log({
+  // put (not add) so concurrent pollers (page + service worker) racing on the
+  // same hash don't throw a ConstraintError.
+  await db.messages_seen.put({
     hash,
     receivedAt: Date.now(),
-    accountSessionID: toHex(keypair.pubKey)
-  })
-  await db.messages_seen.add({ 
-    hash, 
-    receivedAt: Date.now(), 
     accountSessionID: toHex(keypair.pubKey)
   })
 }
@@ -118,6 +133,6 @@ export async function getAllEncryptionKeyPairsForGroup(
   groupPublicKey: string | PubKey
 ): Promise<Array<HexKeyPair> | undefined> {
   const pubkey = (groupPublicKey as PubKey).key || (groupPublicKey as string)
-  const items = window.localStorage.getItem('group-'+pubkey)
+  const items = typeof window !== 'undefined' ? window.localStorage.getItem('group-'+pubkey) : null
   return items ? JSON.parse(items) : undefined
 }

@@ -13,6 +13,7 @@ import { removeMessagePadding } from '@/shared/api/buffer-padding'
 import { getAllCachedECKeyPair } from '@/shared/api/closed-groups'
 import { SignalService } from '@/shared/api/signal-service'
 import * as UserUtils from '@/shared/api/utils/User'
+import { hasMagicBytes, stripMagicBytes } from '@/shared/api/magic-bytes'
 
 type WebSocketContent = null | {
   body: Uint8Array;
@@ -24,7 +25,14 @@ export function extractWebSocketContent(
   messageHash: string
 ): WebSocketContent {
   try {
-    const dataPlaintext = new Uint8Array(StringUtils.encode(message, 'base64'))
+    const raw = new Uint8Array(StringUtils.encode(message, 'base64'))
+    // Apocentro: reject anything that isn't wrapped with our magic bytes
+    // (standard Session messages, noise) before attempting to decode.
+    if (!hasMagicBytes(raw)) {
+      console.warn('[apc-debug] dropped message: no magic bytes', { messageHash, firstBytes: Array.from(raw.slice(0, 8)) })
+      return null
+    }
+    const dataPlaintext = stripMagicBytes(raw)
     const messageBuf = SignalService.WebSocketMessage.decode(dataPlaintext)
     if (
       messageBuf.type === SignalService.WebSocketMessage.Type.REQUEST &&
