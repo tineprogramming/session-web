@@ -13,7 +13,7 @@ There are no accounts, phone numbers, or central servers — just a mnemonic and
 the decentralized Session network, reached through a real client‑side 3‑hop
 onion route. Private keys and decrypted messages never leave the browser.
 
-**Live:** https://tinebritania.tinestuff.com/apocentro/
+**Live:** https://tinecarlogpt.tinestuff.com/apocentro/
 
 ## Features
 
